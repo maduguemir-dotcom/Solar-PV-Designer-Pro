@@ -1,15 +1,21 @@
-
 def calculate_battery_capacity(
     energy,
     autonomy_days,
-    depth_of_discharge
+    battery_type
 ):
-    """
-    Calculate battery storage requirement
-    """
+
+    if battery_type == "Lithium":
+
+        dod = 0.90
+
+    else:
+
+        dod = 0.50
+
 
     battery = (
         energy * autonomy_days
-    ) / (depth_of_discharge / 100)
+    ) / dod
+
 
     return battery
