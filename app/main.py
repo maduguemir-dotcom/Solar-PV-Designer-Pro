@@ -2,8 +2,10 @@ import streamlit as st
 
 from solar_calculator import calculate_pv_size
 from battery_model import calculate_battery_capacity
+#from inverter_model import calculate_inverter_size
 from inverter_model import calculate_inverter_size
-
+from solar_calculator import calculate_number_of_panels
+from cost_estimator import calculate_cost
 
 st.set_page_config(
     page_title="Solar PV Designer Pro",
