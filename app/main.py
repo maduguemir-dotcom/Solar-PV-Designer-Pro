@@ -1,93 +1,112 @@
 import streamlit as st
 
+from solar_calculator import calculate_pv_size
+from battery_model import calculate_battery_capacity
+from inverter_model import calculate_inverter_size
 
-# Solar PV Designer Pro v1.0
 
-st.title("☀️ Solar PV Designer Pro v1.0")
-
-st.write(
-    "Intelligent Solar PV System Sizing Tool "
-    "for Engineers, Researchers and Students"
+st.set_page_config(
+    page_title="Solar PV Designer Pro",
+    page_icon="☀️"
 )
 
 
-# User Inputs
+st.title(
+    "☀️ Solar PV Designer Pro v1.0"
+)
 
-energy = st.number_input(
-    "Daily Energy Consumption (kWh/day)",
-    min_value=0.1,
+st.write(
+    "Professional Solar Energy System Design Platform"
+)
+
+
+st.sidebar.header(
+    "System Inputs"
+)
+
+
+energy = st.sidebar.number_input(
+    "Daily Energy (kWh/day)",
     value=5.0
 )
 
-sun_hours = st.number_input(
-    "Peak Sun Hours per Day",
-    min_value=1.0,
+
+sun_hours = st.sidebar.number_input(
+    "Peak Sun Hours",
     value=4.0
 )
 
-efficiency = st.slider(
-    "System Efficiency (%)",
+
+efficiency = st.sidebar.slider(
+    "System Efficiency %",
     50,
     100,
     80
 )
 
-days = st.number_input(
+
+days = st.sidebar.number_input(
     "Battery Autonomy Days",
-    min_value=1,
     value=3
 )
 
-dod = st.slider(
-    "Battery Depth of Discharge (%)",
+
+dod = st.sidebar.slider(
+    "Battery Depth of Discharge %",
     20,
     100,
     50
 )
 
 
-# Calculations
 
-if st.button("Calculate Solar System"):
+if st.button("Design Solar System"):
 
-    efficiency_factor = efficiency / 100
-
-    # Solar panel size
-
-    pv_size = energy / (
-        sun_hours * efficiency_factor
+    pv = calculate_pv_size(
+        energy,
+        sun_hours,
+        efficiency
     )
 
 
-    # Battery size
-
-    battery_capacity = (
-        energy * days
-    ) / (dod / 100)
-
-
-    # Inverter size
-
-    inverter_size = pv_size * 1.25
-
-
-    st.subheader("Design Results")
-
-    st.success(
-        f"Solar Panel Size: {pv_size:.2f} kW"
-    )
-
-    st.success(
-        f"Battery Capacity Required: "
-        f"{battery_capacity:.2f} kWh"
-    )
-
-    st.success(
-        f"Recommended Inverter Size: "
-        f"{inverter_size:.2f} kW"
+    battery = calculate_battery_capacity(
+        energy,
+        days,
+        dod
     )
 
 
-st.caption(
-    "Developed for renewable energy education and research"
+    inverter = calculate_inverter_size(
+        pv
+    )
+
+
+    st.header(
+        "Design Results"
+    )
+
+
+    col1, col2, col3 = st.columns(3)
+
+
+    col1.metric(
+        "PV Size",
+        f"{pv:.2f} kW"
+    )
+
+
+    col2.metric(
+        "Battery",
+        f"{battery:.2f} kWh"
+    )
+
+
+    col3.metric(
+        "Inverter",
+        f"{inverter:.2f} kW"
+    )
+
+
+st.info(
+    "Solar PV Designer Pro - Research Prototype"
 )
