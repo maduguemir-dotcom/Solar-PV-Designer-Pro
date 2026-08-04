@@ -1,10 +1,12 @@
 import streamlit as st
+import pandas as pd
 
 
-# =========================================
-# Solar PV Designer Pro Africa
-# Version 1.1 Dashboard Edition
-# =========================================
+# ==========================================
+# Solar PV Designer Pro Africa™
+# Version 1.2
+# Location Intelligent Edition
+# ==========================================
 
 
 st.set_page_config(
@@ -14,289 +16,399 @@ st.set_page_config(
 )
 
 
-# Sidebar Navigation
+# Title
 
-st.sidebar.title("☀️ Solar PV Designer Pro")
+st.title(
+    "☀️ Solar PV Designer Pro Africa™"
+)
 
-page = st.sidebar.radio(
-    "Navigation",
+st.subheader(
+    "Location Intelligent Renewable Energy Design Platform"
+)
+
+
+st.write(
+    """
+    This application designs solar photovoltaic systems
+    using energy demand, solar resource and environmental
+    conditions.
+    """
+)
+
+
+# ==========================================
+# Load Solar Database
+# ==========================================
+
+try:
+
+    solar_data = pd.read_csv(
+        "data/solar_locations.csv"
+    )
+
+except:
+
+    st.error(
+        "Solar database not found. Please check data/solar_locations.csv"
+    )
+
+    st.stop()
+
+
+
+# ==========================================
+# Sidebar Inputs
+# ==========================================
+
+
+st.sidebar.header(
+    "⚙️ System Design Parameters"
+)
+
+
+
+location = st.sidebar.selectbox(
+    "📍 Select Location",
+    solar_data["Location"]
+)
+
+
+
+selected_location = solar_data[
+    solar_data["Location"] == location
+]
+
+
+
+sun_hours = float(
+    selected_location[
+        "Peak_Sun_Hours"
+    ].values[0]
+)
+
+
+
+temperature = float(
+    selected_location[
+        "Average_Temperature"
+    ].values[0]
+)
+
+
+
+energy = st.sidebar.number_input(
+    "Daily Energy Demand (kWh/day)",
+    min_value=0.5,
+    value=5.0
+)
+
+
+
+efficiency = st.sidebar.slider(
+    "System Efficiency (%)",
+    50,
+    100,
+    80
+)
+
+
+
+battery_type = st.sidebar.selectbox(
+    "Battery Technology",
     [
-        "🏠 Dashboard",
-        "⚡ PV System Design",
-        "🔋 Battery Analysis",
-        "💰 Cost Estimation",
-        "🌱 Environmental Impact",
-        "ℹ️ About Project"
+        "Lithium-ion",
+        "Lead Acid"
     ]
 )
 
 
-# =========================================
-# Dashboard
-# =========================================
 
-if page == "🏠 Dashboard":
-
-    st.title(
-        "☀️ Solar PV Designer Pro Africa™"
-    )
-
-    st.subheader(
-        "AI-Driven Renewable Energy Design Platform"
-    )
-
-
-    st.write(
-        """
-        Welcome to Solar PV Designer Pro Africa.
-
-        This platform is designed to help:
-        
-        - Engineers
-        - Researchers
-        - Students
-        - Renewable energy professionals
-
-        design optimized solar photovoltaic systems.
-        """
-    )
-
-
-    col1, col2, col3 = st.columns(3)
-
-
-    col1.metric(
-        "Version",
-        "1.1"
-    )
-
-    col2.metric(
-        "Technology",
-        "Python + AI Ready"
-    )
-
-    col3.metric(
-        "Region",
-        "Africa"
-    )
+autonomy_days = st.sidebar.number_input(
+    "Battery Backup Days",
+    min_value=1,
+    value=3
+)
 
 
 
-# =========================================
-# PV Design
-# =========================================
-
-elif page == "⚡ PV System Design":
-
-
-    st.title(
-        "⚡ Solar PV System Design"
-    )
+panel_rating = st.sidebar.selectbox(
+    "Solar Panel Rating (Watts)",
+    [
+        450,
+        550,
+        600
+    ]
+)
 
 
-    energy = st.number_input(
-        "Daily Energy Consumption (kWh/day)",
-        value=5.0
-    )
+
+# ==========================================
+# Location Information
+# ==========================================
 
 
-    sun_hours = st.number_input(
-        "Peak Sun Hours",
-        value=4.0
-    )
+st.header(
+    "📍 Solar Resource Information"
+)
 
 
-    efficiency = st.slider(
-        "System Efficiency (%)",
-        50,
-        100,
-        80
-    )
+
+col1, col2, col3 = st.columns(3)
 
 
-    if st.button("Calculate PV Size"):
+col1.metric(
+    "Location",
+    location
+)
 
 
-        pv_size = energy / (
-            sun_hours *
-            efficiency/100
-        )
+col2.metric(
+    "Peak Sun Hours",
+    f"{sun_hours} h/day"
+)
 
 
-        panels = round(
-            pv_size / 0.55
-        )
+col3.metric(
+    "Temperature",
+    f"{temperature} °C"
+)
 
 
-        inverter = pv_size * 1.25
+
+# ==========================================
+# Calculation Button
+# ==========================================
 
 
-        st.success(
-            f"Required PV Capacity: {pv_size:.2f} kW"
-        )
+if st.button(
+    "🚀 Design Solar PV System"
+):
 
 
-        st.success(
-            f"Recommended Panels: {panels} × 550W"
-        )
+    # Temperature correction
+
+    temperature_factor = 1
 
 
-        st.success(
-            f"Inverter Size: {inverter:.2f} kW"
+    if temperature > 25:
+
+        temperature_factor = (
+            1 +
+            ((temperature - 25) * 0.005)
         )
 
 
 
-# =========================================
-# Battery Analysis
-# =========================================
-
-elif page == "🔋 Battery Analysis":
+    # PV Size Calculation
 
 
-    st.title(
-        "🔋 Battery Storage Analysis"
+    pv_size = energy / (
+        sun_hours *
+        (efficiency / 100)
     )
 
 
-    energy = st.number_input(
-        "Daily Energy (kWh/day)",
-        value=5.0
+
+    pv_size = (
+        pv_size *
+        temperature_factor
     )
 
 
-    days = st.number_input(
-        "Backup Days",
-        value=3
+
+    # Panel Number
+
+
+    panel_kw = (
+        panel_rating /
+        1000
     )
 
 
-    battery = st.selectbox(
-        "Battery Type",
-        [
-            "Lithium-ion",
-            "Lead Acid"
-        ]
+    number_of_panels = round(
+        pv_size /
+        panel_kw
     )
 
 
-    if battery == "Lithium-ion":
 
-        dod = 0.9
+    # Battery Calculation
+
+
+    if battery_type == "Lithium-ion":
+
+        dod = 0.90
 
     else:
 
-        dod = 0.5
+        dod = 0.50
 
 
 
-    capacity = (
-        energy * days
+    battery_capacity = (
+        energy *
+        autonomy_days
     ) / dod
 
 
-    st.info(
-        f"Required Battery Capacity: {capacity:.2f} kWh"
+
+    # Inverter Calculation
+
+
+    inverter_size = (
+        pv_size *
+        1.25
     )
 
 
 
-# =========================================
-# Cost Estimation
-# =========================================
-
-elif page == "💰 Cost Estimation":
+    # Charge Controller
 
 
-    st.title(
-        "💰 Solar System Cost Estimation"
-    )
-
-
-    pv = st.number_input(
-        "PV Size (kW)",
-        value=3.0
-    )
-
-
-    battery = st.number_input(
-        "Battery Capacity (kWh)",
-        value=10.0
-    )
-
-
-    inverter = st.number_input(
-        "Inverter Size (kW)",
-        value=3.0
-    )
-
-
-    cost = (
-        pv*800 +
-        battery*300 +
-        inverter*250
-    )
-
-
-    st.success(
-        f"Estimated Equipment Cost: ${cost:,.0f}"
+    controller_current = (
+        pv_size *
+        1000 /
+        48
     )
 
 
 
-# =========================================
-# Environmental Impact
-# =========================================
-
-elif page == "🌱 Environmental Impact":
+    # Cost Estimation
 
 
-    st.title(
-        "🌱 Environmental Benefits"
+    panel_cost = (
+        pv_size *
+        800
     )
 
 
-    energy_saved = st.number_input(
-        "Solar Energy Generated (kWh/year)",
-        value=3000
+    battery_cost = (
+        battery_capacity *
+        300
     )
 
 
-    carbon = energy_saved * 0.45
+    inverter_cost = (
+        inverter_size *
+        250
+    )
 
 
-    st.success(
-        f"Estimated CO₂ Reduction: {carbon:,.0f} kg/year"
+    installation = (
+        panel_cost +
+        battery_cost +
+        inverter_cost
+    ) * 0.15
+
+
+
+    total_cost = (
+        panel_cost +
+        battery_cost +
+        inverter_cost +
+        installation
     )
 
 
 
-# =========================================
-# About
-# =========================================
-
-elif page == "ℹ️ About Project":
+    # ======================================
+    # Results
+    # ======================================
 
 
-    st.title(
-        "ℹ️ About Solar PV Designer Pro Africa™"
+    st.header(
+        "📊 System Design Results"
+    )
+
+
+    c1, c2, c3 = st.columns(3)
+
+
+    c1.metric(
+        "PV Capacity",
+        f"{pv_size:.2f} kW"
+    )
+
+
+    c2.metric(
+        "Battery",
+        f"{battery_capacity:.2f} kWh"
+    )
+
+
+    c3.metric(
+        "Inverter",
+        f"{inverter_size:.2f} kW"
+    )
+
+
+
+    st.divider()
+
+
+
+    st.subheader(
+        "Equipment Recommendation"
     )
 
 
     st.write(
-        """
-        Developed as a renewable energy engineering
-        and artificial intelligence demonstration project.
+        f"""
+        ☀️ Solar Panels:
 
-        Developer:
+        **{number_of_panels} × {panel_rating}W panels**
+
+
+        🔋 Battery System:
+
+        **{battery_type}**
         
-        Engr. Prof. Ibrahim Sani Madugu
 
-        Future developments:
+        ⚡ Charge Controller:
 
-        ✓ AI solar prediction
-        ✓ GIS solar mapping
-        ✓ Weather integration
-        ✓ Automated engineering reports
+        Approximately **{controller_current:.1f} A**
+
+
+        💰 Estimated Project Cost:
+
+        **${total_cost:,.0f}**
         """
     )
+
+
+
+    # Environmental benefit
+
+
+    carbon = (
+        energy *
+        365 *
+        0.45
+    )
+
+
+    st.success(
+        f"Estimated Annual CO₂ Reduction: {carbon:,.0f} kg/year"
+    )
+
+
+
+# ==========================================
+# About Section
+# ==========================================
+
+
+st.divider()
+
+
+st.caption(
+    """
+    Solar PV Designer Pro Africa™ v1.2
+
+    Developed as an AI-ready renewable energy
+    engineering platform.
+
+    Developer:
+    Engr. Prof. Ibrahim Sani Madugu
+    """
+)
