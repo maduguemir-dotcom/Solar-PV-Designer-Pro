@@ -1,11 +1,23 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+from datetime import date
+
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle
+)
+
+from reportlab.lib.styles import getSampleStyleSheet
 
 
 # ==========================================
 # Solar PV Designer Pro Africa™
-# Version 1.2
-# Location Intelligent Edition
+# Version 1.3
+# PDF Report Edition
 # ==========================================
 
 
@@ -16,29 +28,224 @@ st.set_page_config(
 )
 
 
-# Title
+# ==========================================
+# PDF REPORT FUNCTION
+# ==========================================
+
+
+def create_pdf_report(data):
+
+    buffer = BytesIO()
+
+    document = SimpleDocTemplate(
+        buffer
+    )
+
+    styles = getSampleStyleSheet()
+
+    content = []
+
+
+    title = Paragraph(
+        "Solar PV Designer Pro Africa™<br/>"
+        "Renewable Energy System Design Report",
+        styles["Title"]
+    )
+
+    content.append(title)
+
+    content.append(
+        Spacer(1, 20)
+    )
+
+
+    content.append(
+        Paragraph(
+            f"Prepared by: Engr. Prof. Ibrahim Sani Madugu<br/>"
+            f"Report Date: {date.today()}",
+            styles["Normal"]
+        )
+    )
+
+
+    content.append(
+        Spacer(1,20)
+    )
+
+
+    content.append(
+        Paragraph(
+            "1. Project Summary",
+            styles["Heading2"]
+        )
+    )
+
+
+    summary = [
+
+        ["Parameter","Value"],
+
+        ["Location", data["location"]],
+
+        ["Energy Demand",
+         f'{data["energy"]} kWh/day'],
+
+        ["Battery Type",
+         data["battery_type"]],
+
+        ["Autonomy",
+         f'{data["days"]} days']
+
+    ]
+
+
+    table = Table(summary)
+
+
+    table.setStyle(
+        TableStyle(
+            [
+                ("GRID",(0,0),(-1,-1),0.5,None)
+            ]
+        )
+    )
+
+
+    content.append(table)
+
+
+    content.append(
+        Spacer(1,20)
+    )
+
+
+    content.append(
+        Paragraph(
+            "2. Technical Design Results",
+            styles["Heading2"]
+        )
+    )
+
+
+    technical = [
+
+        ["Design Parameter","Result"],
+
+        ["PV Capacity",
+         f'{data["pv"]:.2f} kW'],
+
+        ["Solar Panels",
+         f'{data["panels"]} panels'],
+
+        ["Battery Capacity",
+         f'{data["battery"]:.2f} kWh'],
+
+        ["Inverter Size",
+         f'{data["inverter"]:.2f} kW']
+
+    ]
+
+
+    table2 = Table(
+        technical
+    )
+
+
+    table2.setStyle(
+        TableStyle(
+            [
+                ("GRID",(0,0),(-1,-1),0.5,None)
+            ]
+        )
+    )
+
+
+    content.append(table2)
+
+
+    content.append(
+        Spacer(1,20)
+    )
+
+
+    content.append(
+        Paragraph(
+            "3. Economic and Environmental Analysis",
+            styles["Heading2"]
+        )
+    )
+
+
+    economic = [
+
+        ["Item","Value"],
+
+        ["Estimated Cost",
+         f'${data["cost"]:,.0f}'],
+
+        ["Annual CO₂ Reduction",
+         f'{data["carbon"]:,.0f} kg/year']
+
+    ]
+
+
+    table3 = Table(
+        economic
+    )
+
+
+    table3.setStyle(
+        TableStyle(
+            [
+                ("GRID",(0,0),(-1,-1),0.5,None)
+            ]
+        )
+    )
+
+
+    content.append(table3)
+
+
+    content.append(
+        Spacer(1,20)
+    )
+
+
+    content.append(
+        Paragraph(
+            "Engineering Note: "
+            "This preliminary design should be verified "
+            "by a qualified solar engineer before installation.",
+            styles["Normal"]
+        )
+    )
+
+
+    document.build(
+        content
+    )
+
+
+    buffer.seek(0)
+
+    return buffer
+
+
+
+# ==========================================
+# APPLICATION INTERFACE
+# ==========================================
+
 
 st.title(
-    "☀️ Solar PV Designer Pro Africa™"
+    "☀️ Solar PV Designer Pro Africa™ v1.3"
 )
+
 
 st.subheader(
-    "Location Intelligent Renewable Energy Design Platform"
+    "Intelligent Solar Design and Reporting Platform"
 )
 
-
-st.write(
-    """
-    This application designs solar photovoltaic systems
-    using energy demand, solar resource and environmental
-    conditions.
-    """
-)
-
-
-# ==========================================
-# Load Solar Database
-# ==========================================
 
 try:
 
@@ -46,71 +253,49 @@ try:
         "data/solar_locations.csv"
     )
 
+
 except:
 
     st.error(
-        "Solar database not found. Please check data/solar_locations.csv"
+        "Solar database missing. Check data/solar_locations.csv"
     )
 
     st.stop()
 
 
 
-# ==========================================
-# Sidebar Inputs
-# ==========================================
-
+# Sidebar
 
 st.sidebar.header(
-    "⚙️ System Design Parameters"
+    "System Inputs"
 )
 
 
-
 location = st.sidebar.selectbox(
-    "📍 Select Location",
+    "Select Location",
     solar_data["Location"]
 )
 
 
-
-selected_location = solar_data[
+location_data = solar_data[
     solar_data["Location"] == location
 ]
 
 
-
 sun_hours = float(
-    selected_location[
-        "Peak_Sun_Hours"
-    ].values[0]
+    location_data["Peak_Sun_Hours"].values[0]
 )
-
 
 
 temperature = float(
-    selected_location[
-        "Average_Temperature"
-    ].values[0]
+    location_data["Average_Temperature"].values[0]
 )
-
 
 
 energy = st.sidebar.number_input(
     "Daily Energy Demand (kWh/day)",
-    min_value=0.5,
     value=5.0
 )
-
-
-
-efficiency = st.sidebar.slider(
-    "System Efficiency (%)",
-    50,
-    100,
-    80
-)
-
 
 
 battery_type = st.sidebar.selectbox(
@@ -122,61 +307,25 @@ battery_type = st.sidebar.selectbox(
 )
 
 
-
-autonomy_days = st.sidebar.number_input(
+days = st.sidebar.number_input(
     "Battery Backup Days",
-    min_value=1,
     value=3
 )
 
 
+efficiency = st.sidebar.slider(
+    "System Efficiency (%)",
+    50,
+    100,
+    80
+)
+
 
 panel_rating = st.sidebar.selectbox(
-    "Solar Panel Rating (Watts)",
-    [
-        450,
-        550,
-        600
-    ]
-)
-
-
-
-# ==========================================
-# Location Information
-# ==========================================
-
-
-st.header(
-    "📍 Solar Resource Information"
-)
-
-
-
-col1, col2, col3 = st.columns(3)
-
-
-col1.metric(
-    "Location",
-    location
-)
-
-
-col2.metric(
-    "Peak Sun Hours",
-    f"{sun_hours} h/day"
-)
-
-
-col3.metric(
-    "Temperature",
-    f"{temperature} °C"
-)
-
-
-
-# ==========================================
-# Calculation Button
+    "Panel Rating (Watts)",
+    [450,550,600]
+)# ==========================================
+# SYSTEM CALCULATION
 # ==========================================
 
 
@@ -199,14 +348,12 @@ if st.button(
 
 
 
-    # PV Size Calculation
-
+    # PV Calculation
 
     pv_size = energy / (
         sun_hours *
         (efficiency / 100)
     )
-
 
 
     pv_size = (
@@ -216,16 +363,14 @@ if st.button(
 
 
 
-    # Panel Number
-
+    # Number of panels
 
     panel_kw = (
-        panel_rating /
-        1000
+        panel_rating / 1000
     )
 
 
-    number_of_panels = round(
+    panels = round(
         pv_size /
         panel_kw
     )
@@ -247,13 +392,12 @@ if st.button(
 
     battery_capacity = (
         energy *
-        autonomy_days
+        days
     ) / dod
 
 
 
-    # Inverter Calculation
-
+    # Inverter
 
     inverter_size = (
         pv_size *
@@ -264,8 +408,7 @@ if st.button(
 
     # Charge Controller
 
-
-    controller_current = (
+    controller = (
         pv_size *
         1000 /
         48
@@ -273,7 +416,7 @@ if st.button(
 
 
 
-    # Cost Estimation
+    # Cost Calculation
 
 
     panel_cost = (
@@ -294,7 +437,7 @@ if st.button(
     )
 
 
-    installation = (
+    installation_cost = (
         panel_cost +
         battery_cost +
         inverter_cost
@@ -306,22 +449,32 @@ if st.button(
         panel_cost +
         battery_cost +
         inverter_cost +
-        installation
+        installation_cost
+    )
+
+
+
+    # Carbon Reduction
+
+    carbon_reduction = (
+        energy *
+        365 *
+        0.45
     )
 
 
 
     # ======================================
-    # Results
+    # DISPLAY RESULTS
     # ======================================
 
 
     st.header(
-        "📊 System Design Results"
+        "📊 Solar System Design Results"
     )
 
 
-    c1, c2, c3 = st.columns(3)
+    c1,c2,c3 = st.columns(3)
 
 
     c1.metric(
@@ -348,7 +501,7 @@ if st.button(
 
 
     st.subheader(
-        "Equipment Recommendation"
+        "Recommended Equipment"
     )
 
 
@@ -356,20 +509,30 @@ if st.button(
         f"""
         ☀️ Solar Panels:
 
-        **{number_of_panels} × {panel_rating}W panels**
+        **{panels} × {panel_rating}W panels**
 
 
-        🔋 Battery System:
+        🔋 Battery:
 
         **{battery_type}**
-        
+
 
         ⚡ Charge Controller:
 
-        Approximately **{controller_current:.1f} A**
+        **{controller:.1f} A**
 
 
-        💰 Estimated Project Cost:
+        📍 Location:
+
+        **{location}**
+
+
+        🌡️ Temperature:
+
+        **{temperature} °C**
+
+
+        💰 Estimated Cost:
 
         **${total_cost:,.0f}**
         """
@@ -377,24 +540,67 @@ if st.button(
 
 
 
-    # Environmental benefit
-
-
-    carbon = (
-        energy *
-        365 *
-        0.45
+    st.success(
+        f"Annual CO₂ Reduction: {carbon_reduction:,.0f} kg/year"
     )
 
 
-    st.success(
-        f"Estimated Annual CO₂ Reduction: {carbon:,.0f} kg/year"
+
+    # ======================================
+    # CREATE PDF REPORT
+    # ======================================
+
+
+    report_data = {
+
+        "location": location,
+
+        "energy": energy,
+
+        "battery_type": battery_type,
+
+        "days": days,
+
+        "pv": pv_size,
+
+        "panels": panels,
+
+        "battery": battery_capacity,
+
+        "inverter": inverter_size,
+
+        "cost": total_cost,
+
+        "carbon": carbon_reduction
+
+    }
+
+
+
+    pdf = create_pdf_report(
+        report_data
+    )
+
+
+
+    st.download_button(
+
+        label="📄 Download Solar Design Report (PDF)",
+
+        data=pdf,
+
+        file_name=
+        "Solar_PV_Design_Report.pdf",
+
+        mime=
+        "application/pdf"
+
     )
 
 
 
 # ==========================================
-# About Section
+# Footer
 # ==========================================
 
 
@@ -403,12 +609,11 @@ st.divider()
 
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v1.2
+    Solar PV Designer Pro Africa™ v1.3
 
-    Developed as an AI-ready renewable energy
-    engineering platform.
+    Intelligent Renewable Energy Design Platform
 
-    Developer:
+    Developed by:
     Engr. Prof. Ibrahim Sani Madugu
     """
-)
+    )
