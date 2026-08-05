@@ -13,7 +13,59 @@ from reportlab.platypus import (
 
 from reportlab.lib.styles import getSampleStyleSheet
 
+def ai_recommendation(
+    location,
+    battery_type,
+    pv_size,
+    battery_capacity,
+    carbon
+):
 
+    advice = []
+
+    advice.append(
+        f"Location: {location} has suitable solar resources."
+    )
+
+    if battery_type == "Lithium-ion":
+
+        advice.append(
+            "Lithium-ion batteries are recommended because they offer higher usable capacity and a longer service life."
+        )
+
+    else:
+
+        advice.append(
+            "Lead-acid batteries have a lower initial cost but require more maintenance and have a shorter lifespan."
+        )
+
+    if pv_size < 2:
+
+        advice.append(
+            "This system is appropriate for a small household or office."
+        )
+
+    elif pv_size < 5:
+
+        advice.append(
+            "This system is suitable for medium-sized homes or small businesses."
+        )
+
+    else:
+
+        advice.append(
+            "This design is suitable for commercial facilities or institutions."
+        )
+
+    advice.append(
+        "A 48 V DC system is recommended for improved efficiency and future expansion."
+    )
+
+    advice.append(
+        f"Estimated annual CO₂ reduction is approximately {carbon:.0f} kg."
+    )
+
+    return advice
 # ==========================================
 # Solar PV Designer Pro Africa™
 # Version 1.3
