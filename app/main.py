@@ -3,19 +3,23 @@
 # ==========================================================
 #
 # Main Streamlit Application
-# Version: 2.1.6
+# Version: 2.2
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
 #
-# v2.1.6 Updates:
+# v2.2 Features:
+# - Existing solar database
+# - Worldwide place search
 # - Global coordinate input
-# - Existing solar database retained
-# - NASA POWER live solar-resource integration
-# - Global Location Engine integration
-# - Live peak sun hours from NASA POWER
-# - Live average temperature from NASA POWER
-# - Cleaner modular application architecture
+# - OpenStreetMap/Nominatim geocoding
+# - NASA POWER solar-resource integration
+# - PV sizing
+# - Battery sizing
+# - Inverter sizing
+# - Carbon reduction estimation
+# - AI Solar Advisor
+# - PDF report generation
 #
 # ==========================================================
 
@@ -84,6 +88,16 @@ from utils import (
 from location_engine import (
     get_location_solar_resource,
     get_location_summary
+)
+
+
+# ----------------------------------------------------------
+# Worldwide Location Search
+# ----------------------------------------------------------
+
+from location_search import (
+    search_location,
+    format_search_result
 )
 
 
@@ -159,6 +173,7 @@ location_source = st.sidebar.radio(
     "Choose location method:",
     [
         "Solar Database",
+        "Search for a Place",
         "Enter Coordinates"
     ]
 )
@@ -178,7 +193,6 @@ temperature = None
 
 solar_data = None
 solar_summary = None
-
 location_summary = None
 
 
@@ -187,10 +201,6 @@ location_summary = None
 # ==========================================================
 
 if location_source == "Solar Database":
-
-    # ------------------------------------------------------
-    # Existing database location
-    # ------------------------------------------------------
 
     location = st.sidebar.selectbox(
         "Select Location",
@@ -213,10 +223,6 @@ if location_source == "Solar Database":
         st.stop()
 
 
-    # ------------------------------------------------------
-    # Existing database solar values
-    # ------------------------------------------------------
-
     sun_hours = float(
         location_data["Peak_Sun_Hours"]
     )
@@ -227,20 +233,294 @@ if location_source == "Solar Database":
     )
 
 
-    # ------------------------------------------------------
-    # Database locations do not necessarily have
-    # coordinates in the current database.
-    # ------------------------------------------------------
-
     latitude = None
     longitude = None
-
 
     location_description = location
 
 
 # ==========================================================
-# SECTION 9 - GLOBAL COORDINATE LOCATION
+# SECTION 9 - WORLDWIDE PLACE SEARCH
+# ==========================================================
+
+elif location_source == "Search for a Place":
+
+    st.sidebar.info(
+        """
+        Search for almost any city, town or place
+        in the world.
+
+        Example:
+        Kano, Nigeria
+        Kampala, Uganda
+        London, UK
+        Dubai, UAE
+        Tokyo, Japan
+        """
+    )
+
+
+    # ------------------------------------------------------
+    # Search box
+    # ------------------------------------------------------
+
+    search_query = st.sidebar.text_input(
+        "🔎 Search for a location",
+        value="Kano, Nigeria",
+        placeholder="Example: Kano, Nigeria"
+    )
+
+
+    search_button = st.sidebar.button(
+        "🔎 Search",
+        use_container_width=True
+    )
+
+
+    # ------------------------------------------------------
+    # Search results
+    # ------------------------------------------------------
+
+    search_results = []
+
+
+    if search_button:
+
+        if not search_query.strip():
+
+            st.sidebar.warning(
+                "Please enter a location to search."
+            )
+
+        else:
+
+            with st.sidebar:
+
+                with st.spinner(
+                    "Searching worldwide..."
+                ):
+
+                    search_results = search_location(
+                        search_query,
+                        limit=5
+                    )
+
+
+            if not search_results:
+
+                st.sidebar.error(
+                    "No locations were found."
+                )
+
+
+    # ------------------------------------------------------
+    # Store results in session state
+    # ------------------------------------------------------
+
+    if search_results:
+
+        st.session_state[
+            "location_search_results"
+        ] = search_results
+
+
+    saved_results = st.session_state.get(
+        "location_search_results",
+        []
+    )
+
+
+    # ------------------------------------------------------
+    # Display available results
+    # ------------------------------------------------------
+
+    if saved_results:
+
+        result_labels = [
+            format_search_result(
+                result
+            )
+            for result in saved_results
+        ]
+
+
+        selected_label = st.sidebar.selectbox(
+            "Select a search result",
+            result_labels
+        )
+
+
+        selected_index = (
+            result_labels.index(
+                selected_label
+            )
+        )
+
+
+        selected_location = (
+            saved_results[
+                selected_index
+            ]
+        )
+
+
+        # --------------------------------------------------
+        # Coordinates from search
+        # --------------------------------------------------
+
+        latitude = float(
+            selected_location[
+                "latitude"
+            ]
+        )
+
+
+        longitude = float(
+            selected_location[
+                "longitude"
+            ]
+        )
+
+
+        location_name = (
+            selected_location.get(
+                "name",
+                ""
+            )
+        )
+
+
+        country = (
+            selected_location.get(
+                "country",
+                ""
+            )
+        )
+
+
+        # --------------------------------------------------
+        # Connect selected location to NASA POWER
+        # --------------------------------------------------
+
+        with st.spinner(
+            "Retrieving NASA POWER solar data..."
+        ):
+
+            location_result = (
+                get_location_solar_resource(
+
+                    latitude=latitude,
+
+                    longitude=longitude,
+
+                    location_name=location_name,
+
+                    country=country
+
+                )
+            )
+
+
+        if not location_result["success"]:
+
+            st.sidebar.error(
+                "NASA POWER lookup failed: "
+                + str(
+                    location_result[
+                        "message"
+                    ]
+                )
+            )
+
+            st.stop()
+
+
+        # --------------------------------------------------
+        # Extract NASA summary
+        # --------------------------------------------------
+
+        location_summary = (
+            get_location_summary(
+                location_result
+            )
+        )
+
+
+        solar_data = (
+            location_result.get(
+                "solar"
+            )
+        )
+
+
+        solar_summary = (
+            location_result.get(
+                "summary"
+            )
+        )
+
+
+        sun_hours = (
+            location_summary.get(
+                "peak_sun_hours"
+            )
+        )
+
+
+        temperature = (
+            location_summary.get(
+                "average_temperature"
+            )
+        )
+
+
+        if sun_hours is None:
+
+            st.sidebar.error(
+                "NASA POWER did not return usable "
+                "solar-resource data."
+            )
+
+            st.stop()
+
+
+        if temperature is None:
+
+            temperature = 25.0
+
+
+        location_description = (
+            location_summary.get(
+                "location",
+                selected_location.get(
+                    "display_name",
+                    "Selected Location"
+                )
+            )
+        )
+
+
+        st.sidebar.success(
+            "🌍 Location connected to NASA POWER."
+        )
+
+
+    else:
+
+        # --------------------------------------------------
+        # No search result selected yet
+        # --------------------------------------------------
+
+        latitude = None
+        longitude = None
+
+        location_description = (
+            "Search for a location"
+        )
+
+
+# ==========================================================
+# SECTION 10 - GLOBAL COORDINATE LOCATION
 # ==========================================================
 
 else:
@@ -254,15 +534,11 @@ else:
 
         Longitude: -180 to +180
 
-        NASA POWER will provide the solar-resource
+        NASA POWER will provide solar-resource
         information for the selected location.
         """
     )
 
-
-    # ------------------------------------------------------
-    # Latitude
-    # ------------------------------------------------------
 
     latitude = st.sidebar.number_input(
         "Latitude",
@@ -274,10 +550,6 @@ else:
     )
 
 
-    # ------------------------------------------------------
-    # Longitude
-    # ------------------------------------------------------
-
     longitude = st.sidebar.number_input(
         "Longitude",
         min_value=-180.0,
@@ -288,19 +560,11 @@ else:
     )
 
 
-    # ------------------------------------------------------
-    # Optional location name
-    # ------------------------------------------------------
-
     location_name = st.sidebar.text_input(
         "Location Name",
         value="Kampala"
     )
 
-
-    # ------------------------------------------------------
-    # Optional country
-    # ------------------------------------------------------
 
     country = st.sidebar.text_input(
         "Country",
@@ -309,78 +573,76 @@ else:
 
 
     # ------------------------------------------------------
-    # Connect location to NASA POWER
+    # NASA POWER
     # ------------------------------------------------------
 
-    location_result = get_location_solar_resource(
+    with st.spinner(
+        "Connecting coordinates to NASA POWER..."
+    ):
 
-        latitude=latitude,
+        location_result = (
+            get_location_solar_resource(
 
-        longitude=longitude,
+                latitude=latitude,
 
-        location_name=location_name,
+                longitude=longitude,
 
-        country=country
+                location_name=location_name,
 
-    )
+                country=country
 
+            )
+        )
 
-    # ------------------------------------------------------
-    # Check result
-    # ------------------------------------------------------
 
     if not location_result["success"]:
 
         st.sidebar.error(
             "NASA POWER location lookup failed: "
             + str(
-                location_result["message"]
+                location_result[
+                    "message"
+                ]
             )
         )
 
         st.stop()
 
 
-    # ------------------------------------------------------
-    # Extract location summary
-    # ------------------------------------------------------
-
-    location_summary = get_location_summary(
-        location_result
+    location_summary = (
+        get_location_summary(
+            location_result
+        )
     )
 
 
-    # ------------------------------------------------------
-    # Extract live NASA POWER data
-    # ------------------------------------------------------
-
-    solar_data = location_result.get(
-        "solar"
+    solar_data = (
+        location_result.get(
+            "solar"
+        )
     )
 
 
-    solar_summary = location_result.get(
-        "summary"
+    solar_summary = (
+        location_result.get(
+            "summary"
+        )
     )
 
 
-    # ------------------------------------------------------
-    # Use NASA POWER solar values
-    # ------------------------------------------------------
-
-    sun_hours = location_summary.get(
-        "peak_sun_hours"
+    sun_hours = (
+        location_summary.get(
+            "peak_sun_hours"
+        )
     )
 
 
-    temperature = location_summary.get(
-        "average_temperature"
+    temperature = (
+        location_summary.get(
+            "average_temperature"
+        )
     )
 
-
-    # ------------------------------------------------------
-    # Safety check
-    # ------------------------------------------------------
 
     if sun_hours is None:
 
@@ -397,29 +659,22 @@ else:
         temperature = 25.0
 
 
-    # ------------------------------------------------------
-    # Location description
-    # ------------------------------------------------------
-
     location_description = (
         location_summary.get(
             "location",
-            f"{latitude:.4f}°, {longitude:.4f}°"
+            f"{latitude:.4f}°, "
+            f"{longitude:.4f}°"
         )
     )
 
 
-    # ------------------------------------------------------
-    # Confirmation
-    # ------------------------------------------------------
-
     st.sidebar.success(
-        "🌍 Location connected to NASA POWER."
+        "🌍 Coordinates connected to NASA POWER."
     )
 
 
 # ==========================================================
-# SECTION 10 - ENERGY DEMAND
+# SECTION 11 - ENERGY DEMAND
 # ==========================================================
 
 energy = st.sidebar.number_input(
@@ -431,7 +686,7 @@ energy = st.sidebar.number_input(
 
 
 # ==========================================================
-# SECTION 11 - SYSTEM EFFICIENCY
+# SECTION 12 - SYSTEM EFFICIENCY
 # ==========================================================
 
 efficiency_percent = st.sidebar.slider(
@@ -448,7 +703,7 @@ efficiency = (
 
 
 # ==========================================================
-# SECTION 12 - BATTERY
+# SECTION 13 - BATTERY
 # ==========================================================
 
 battery_type = st.sidebar.selectbox(
@@ -461,7 +716,7 @@ battery_type = st.sidebar.selectbox(
 
 
 # ==========================================================
-# SECTION 13 - BATTERY AUTONOMY
+# SECTION 14 - BATTERY AUTONOMY
 # ==========================================================
 
 days = st.sidebar.number_input(
@@ -473,7 +728,7 @@ days = st.sidebar.number_input(
 
 
 # ==========================================================
-# SECTION 14 - SOLAR PANEL
+# SECTION 15 - SOLAR PANEL
 # ==========================================================
 
 panel_rating = st.sidebar.selectbox(
@@ -487,7 +742,7 @@ panel_rating = st.sidebar.selectbox(
 
 
 # ==========================================================
-# SECTION 15 - SOLAR RESOURCE INFORMATION
+# SECTION 16 - SOLAR RESOURCE INFORMATION
 # ==========================================================
 
 st.header(
@@ -500,19 +755,11 @@ location_col1, location_col2, location_col3 = (
 )
 
 
-# ----------------------------------------------------------
-# Location
-# ----------------------------------------------------------
-
 location_col1.metric(
     "Location",
     location_description
 )
 
-
-# ----------------------------------------------------------
-# Latitude
-# ----------------------------------------------------------
 
 if latitude is None:
 
@@ -530,10 +777,6 @@ location_col2.metric(
     latitude_display
 )
 
-
-# ----------------------------------------------------------
-# Longitude
-# ----------------------------------------------------------
 
 if longitude is None:
 
@@ -553,7 +796,7 @@ location_col3.metric(
 
 
 # ==========================================================
-# SECTION 16 - SOLAR RESOURCE DETAILS
+# SECTION 17 - SOLAR RESOURCE METRICS
 # ==========================================================
 
 solar_info_col1, solar_info_col2, solar_info_col3 = (
@@ -573,34 +816,52 @@ solar_info_col2.metric(
 )
 
 
-if location_source == "Enter Coordinates":
-
-    solar_info_col3.metric(
-        "📡 Data Source",
-        "NASA POWER"
-    )
-
-else:
+if location_source == "Solar Database":
 
     solar_info_col3.metric(
         "📡 Data Source",
         "Solar Database"
     )
 
+else:
+
+    solar_info_col3.metric(
+        "📡 Data Source",
+        "NASA POWER"
+    )
+
 
 # ==========================================================
-# SECTION 17 - DATA SOURCE INFORMATION
+# SECTION 18 - SOLAR DATA INFORMATION
 # ==========================================================
 
-if location_source == "Enter Coordinates":
+if location_source == "Solar Database":
+
+    st.info(
+        f"""
+        **Solar Resource**
+
+        Peak Sun Hours:
+        {sun_hours:.2f} hours/day
+
+        Average Temperature:
+        {temperature:.1f} °C
+
+        Source:
+        Existing Solar Database
+        """
+    )
+
+
+else:
 
     climatology_period = (
         location_summary.get(
             "climatology_period",
-            "2001-2020"
+            "NASA POWER"
         )
         if location_summary
-        else "2001-2020"
+        else "NASA POWER"
     )
 
 
@@ -608,46 +869,48 @@ if location_source == "Enter Coordinates":
         f"""
         **Live Solar Resource**
 
-        Source: NASA POWER
+        Peak Sun Hours:
+        {sun_hours:.2f} hours/day
 
-        Climatology period: {climatology_period}
+        Average Temperature:
+        {temperature:.1f} °C
 
-        Coordinates: {latitude:.4f}°,
-        {longitude:.4f}°
-        """
-    )
+        Source:
+        NASA POWER
 
-else:
-
-    st.info(
-        f"""
-        **Solar Resource Inputs**
-
-        Peak Sun Hours: {sun_hours:.2f} hours/day
-
-        Average Temperature: {temperature:.1f} °C
-
-        Source: Existing Solar Database
+        Climatology:
+        {climatology_period}
         """
     )
 
 
 # ==========================================================
-# SECTION 18 - OPTIONAL NASA MONTHLY DATA
+# SECTION 19 - NASA MONTHLY DATA
 # ==========================================================
 
 if (
-    location_source == "Enter Coordinates"
+    location_source != "Solar Database"
     and solar_data is not None
 ):
 
     with st.expander(
-        "☀️ View NASA POWER Monthly Solar Resource"
+        "☀️ View NASA POWER Solar Data"
     ):
 
-        monthly_display = solar_data.get(
-            "monthly_display",
-            []
+        # ----------------------------------------------
+        # Try to display monthly data
+        # ----------------------------------------------
+
+        monthly_display = (
+            solar_data.get(
+                "monthly_display",
+                []
+            )
+            if isinstance(
+                solar_data,
+                dict
+            )
+            else []
         )
 
 
@@ -660,14 +923,18 @@ if (
 
         else:
 
-            st.warning(
-                "No monthly solar-resource data "
-                "is available for display."
+            # ------------------------------------------
+            # Show complete data if monthly display
+            # is not available.
+            # ------------------------------------------
+
+            st.json(
+                solar_data
             )
 
 
 # ==========================================================
-# SECTION 19 - DESIGN BUTTON
+# SECTION 20 - DESIGN BUTTON
 # ==========================================================
 
 design_button = st.button(
@@ -677,7 +944,7 @@ design_button = st.button(
 
 
 # ==========================================================
-# SECTION 20 - ENGINEERING CALCULATIONS
+# SECTION 21 - ENGINEERING CALCULATIONS
 # ==========================================================
 
 if design_button:
@@ -795,7 +1062,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 21 - ENGINEERING RESULTS
+    # SECTION 22 - ENGINEERING RESULTS
     # ======================================================
 
     st.header(
@@ -830,7 +1097,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 22 - EQUIPMENT RECOMMENDATION
+    # SECTION 23 - EQUIPMENT RECOMMENDATION
     # ======================================================
 
     st.subheader(
@@ -886,7 +1153,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 23 - AI SOLAR ADVISOR
+    # SECTION 24 - AI SOLAR ADVISOR
     # ======================================================
 
     st.divider()
@@ -897,22 +1164,24 @@ if design_button:
     )
 
 
-    recommendations = generate_ai_recommendations(
+    recommendations = (
+        generate_ai_recommendations(
 
-        location=location_description,
+            location=location_description,
 
-        battery_type=battery_type,
+            battery_type=battery_type,
 
-        pv_size=pv_size,
+            pv_size=pv_size,
 
-        battery_capacity=battery_capacity,
+            battery_capacity=battery_capacity,
 
-        inverter_size=inverter_size,
+            inverter_size=inverter_size,
 
-        energy=energy,
+            energy=energy,
 
-        carbon_reduction=carbon_reduction
+            carbon_reduction=carbon_reduction
 
+        )
     )
 
 
@@ -924,7 +1193,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 24 - PDF REPORT DATA
+    # SECTION 25 - PDF REPORT DATA
     # ======================================================
 
     report_data = {
@@ -981,47 +1250,57 @@ if design_button:
             total_cost,
 
         "carbon":
-            carbon_reduction
+            carbon_reduction,
+
+        "data_source":
+            (
+                "Solar Database"
+                if location_source ==
+                "Solar Database"
+                else
+                "NASA POWER"
+            )
 
     }
 
 
     # ------------------------------------------------------
-    # Add coordinates to report where available
+    # Coordinates
     # ------------------------------------------------------
 
     if latitude is not None:
 
-        report_data["latitude"] = latitude
+        report_data[
+            "latitude"
+        ] = latitude
 
 
     if longitude is not None:
 
-        report_data["longitude"] = longitude
+        report_data[
+            "longitude"
+        ] = longitude
 
 
-    if location_source == "Enter Coordinates":
+    # ------------------------------------------------------
+    # NASA climatology
+    # ------------------------------------------------------
 
-        report_data["data_source"] = (
-            "NASA POWER"
-        )
+    if (
+        location_source !=
+        "Solar Database"
+        and location_summary
+    ):
 
-        report_data["climatology_period"] = (
-            location_summary.get(
-                "climatology_period",
-                "2001-2020"
-            )
-        )
-
-    else:
-
-        report_data["data_source"] = (
-            "Solar Database"
+        report_data[
+            "climatology_period"
+        ] = location_summary.get(
+            "climatology_period"
         )
 
 
     # ======================================================
-    # SECTION 25 - PDF REPORT
+    # SECTION 26 - PDF REPORT
     # ======================================================
 
     st.divider()
@@ -1068,7 +1347,7 @@ if design_button:
 
 
 # ==========================================================
-# SECTION 26 - FOOTER
+# SECTION 27 - FOOTER
 # ==========================================================
 
 st.divider()
@@ -1076,9 +1355,9 @@ st.divider()
 
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.1.6
+    Solar PV Designer Pro Africa™ v2.2
 
-    Global Location Engine + NASA POWER
+    Worldwide Location Search + NASA POWER
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
