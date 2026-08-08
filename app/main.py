@@ -3,14 +3,15 @@
 # ==========================================================
 #
 # Main Streamlit Application
-# Version: 2.0
+# Version: 2.1
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
 #
-# Purpose:
-# AI-ready solar photovoltaic system design platform
-# for engineering, research, education and demonstration.
+# New in v2.1:
+# - Global coordinate input
+# - Location source selection
+# - Existing city database retained
 #
 # ==========================================================
 
@@ -28,15 +29,17 @@ from calculations import (
     calculate_panels,
     calculate_battery,
     calculate_inverter,
-    calculate_cost,
     calculate_carbon
 )
 
 
-# Solar database
+# Solar database and coordinates
 from data_loader import (
     load_solar_database,
-    get_location_data
+    get_location_data,
+    validate_coordinates,
+    create_coordinate_location,
+    get_coordinate_solar_data
 )
 
 
@@ -110,7 +113,7 @@ except Exception as error:
 
 
 # ==========================================================
-# SECTION 5 - SIDEBAR / USER INPUTS
+# SECTION 5 - SIDEBAR
 # ==========================================================
 
 st.sidebar.header(
@@ -118,48 +121,180 @@ st.sidebar.header(
 )
 
 
-# ----------------------------------------------------------
-# Location
-# ----------------------------------------------------------
+# ==========================================================
+# SECTION 6 - LOCATION SOURCE
+# ==========================================================
 
-location = st.sidebar.selectbox(
-    "📍 Select Location",
-    solar_data["Location"].tolist()
+st.sidebar.subheader(
+    "📍 Project Location"
 )
 
 
-# Get selected location information
-
-location_data = get_location_data(
-    solar_data,
-    location
+location_source = st.sidebar.radio(
+    "Choose location method:",
+    [
+        "Solar Database",
+        "Enter Coordinates"
+    ]
 )
 
 
-if location_data is None:
+# ==========================================================
+# SECTION 7 - LOCATION PROCESSING
+# ==========================================================
 
-    st.error(
-        "Selected location could not be found."
+if location_source == "Solar Database":
+
+    # ------------------------------------------------------
+    # Existing database location
+    # ------------------------------------------------------
+
+    location = st.sidebar.selectbox(
+        "Select Location",
+        solar_data["Location"].tolist()
     )
 
-    st.stop()
+
+    location_data = get_location_data(
+        solar_data,
+        location
+    )
 
 
-# Solar resource
+    if location_data is None:
 
-sun_hours = float(
-    location_data["Peak_Sun_Hours"]
-)
+        st.error(
+            "Selected location could not be found."
+        )
 
-
-temperature = float(
-    location_data["Average_Temperature"]
-)
+        st.stop()
 
 
-# ----------------------------------------------------------
-# Energy demand
-# ----------------------------------------------------------
+    sun_hours = float(
+        location_data["Peak_Sun_Hours"]
+    )
+
+
+    temperature = float(
+        location_data["Average_Temperature"]
+    )
+
+
+    latitude = None
+
+    longitude = None
+
+
+    location_description = location
+
+
+else:
+
+    # ------------------------------------------------------
+    # Coordinate-based location
+    # ------------------------------------------------------
+
+    st.sidebar.info(
+        """
+        Enter the geographical coordinates
+        of your project site.
+
+        Latitude: -90 to +90
+
+        Longitude: -180 to +180
+        """
+    )
+
+
+    latitude = st.sidebar.number_input(
+        "Latitude",
+        min_value=-90.0,
+        max_value=90.0,
+        value=0.0,
+        step=0.0001,
+        format="%.4f"
+    )
+
+
+    longitude = st.sidebar.number_input(
+        "Longitude",
+        min_value=-180.0,
+        max_value=180.0,
+        value=0.0,
+        step=0.0001,
+        format="%.4f"
+    )
+
+
+    coordinates_valid = validate_coordinates(
+        latitude,
+        longitude
+    )
+
+
+    if not coordinates_valid:
+
+        st.sidebar.error(
+            "Invalid coordinates."
+        )
+
+        st.stop()
+
+
+    coordinate_location = (
+        create_coordinate_location(
+            latitude,
+            longitude
+        )
+    )
+
+
+    solar_resource = (
+        get_coordinate_solar_data(
+            latitude,
+            longitude
+        )
+    )
+
+
+    location_description = (
+        coordinate_location["Location"]
+    )
+
+
+    # ------------------------------------------------------
+    # Temporary values
+    #
+    # These will be replaced by live solar
+    # resource data in the next stage.
+    # ------------------------------------------------------
+
+    sun_hours = st.sidebar.number_input(
+        "Estimated Peak Sun Hours",
+        min_value=1.0,
+        max_value=12.0,
+        value=5.0,
+        step=0.1
+    )
+
+
+    temperature = st.sidebar.number_input(
+        "Estimated Average Temperature (°C)",
+        min_value=-50.0,
+        max_value=60.0,
+        value=25.0,
+        step=0.5
+    )
+
+
+    st.sidebar.success(
+        "Coordinates accepted."
+    )
+
+
+# ==========================================================
+# SECTION 8 - ENERGY DEMAND
+# ==========================================================
 
 energy = st.sidebar.number_input(
     "Daily Energy Demand (kWh/day)",
@@ -169,9 +304,9 @@ energy = st.sidebar.number_input(
 )
 
 
-# ----------------------------------------------------------
-# System efficiency
-# ----------------------------------------------------------
+# ==========================================================
+# SECTION 9 - SYSTEM EFFICIENCY
+# ==========================================================
 
 efficiency_percent = st.sidebar.slider(
     "Overall System Efficiency (%)",
@@ -186,9 +321,9 @@ efficiency = (
 )
 
 
-# ----------------------------------------------------------
-# Battery
-# ----------------------------------------------------------
+# ==========================================================
+# SECTION 10 - BATTERY
+# ==========================================================
 
 battery_type = st.sidebar.selectbox(
     "Battery Technology",
@@ -199,9 +334,9 @@ battery_type = st.sidebar.selectbox(
 )
 
 
-# ----------------------------------------------------------
-# Autonomy
-# ----------------------------------------------------------
+# ==========================================================
+# SECTION 11 - BATTERY AUTONOMY
+# ==========================================================
 
 days = st.sidebar.number_input(
     "Battery Backup / Autonomy (Days)",
@@ -211,9 +346,9 @@ days = st.sidebar.number_input(
 )
 
 
-# ----------------------------------------------------------
-# Solar panel
-# ----------------------------------------------------------
+# ==========================================================
+# SECTION 12 - SOLAR PANEL
+# ==========================================================
 
 panel_rating = st.sidebar.selectbox(
     "Solar Panel Rating (Watts)",
@@ -226,7 +361,7 @@ panel_rating = st.sidebar.selectbox(
 
 
 # ==========================================================
-# SECTION 6 - LOCATION INFORMATION
+# SECTION 13 - LOCATION INFORMATION
 # ==========================================================
 
 st.header(
@@ -241,24 +376,39 @@ location_col1, location_col2, location_col3 = (
 
 location_col1.metric(
     "Location",
-    location
+    location_description
 )
 
 
 location_col2.metric(
-    "Peak Sun Hours",
-    f"{sun_hours:.1f} h/day"
+    "Latitude",
+    "Database"
+    if latitude is None
+    else f"{latitude:.4f}°"
 )
 
 
 location_col3.metric(
-    "Average Temperature",
-    f"{temperature:.1f} °C"
+    "Longitude",
+    "Database"
+    if longitude is None
+    else f"{longitude:.4f}°"
+)
+
+
+st.info(
+    f"""
+    Current solar-resource inputs:
+
+    **Peak Sun Hours:** {sun_hours:.1f} hours/day
+
+    **Average Temperature:** {temperature:.1f} °C
+    """
 )
 
 
 # ==========================================================
-# SECTION 7 - DESIGN BUTTON
+# SECTION 14 - DESIGN BUTTON
 # ==========================================================
 
 design_button = st.button(
@@ -268,7 +418,7 @@ design_button = st.button(
 
 
 # ==========================================================
-# SECTION 8 - ENGINEERING CALCULATIONS
+# SECTION 15 - ENGINEERING CALCULATIONS
 # ==========================================================
 
 if design_button:
@@ -317,8 +467,6 @@ if design_button:
 
     # ------------------------------------------------------
     # Charge controller
-    #
-    # Preliminary estimate using a 48 V architecture.
     # ------------------------------------------------------
 
     controller_current = (
@@ -327,7 +475,7 @@ if design_button:
 
 
     # ------------------------------------------------------
-    # Cost components
+    # Cost estimation
     # ------------------------------------------------------
 
     panel_cost = (
@@ -376,7 +524,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 9 - DISPLAY ENGINEERING RESULTS
+    # SECTION 16 - DISPLAY ENGINEERING RESULTS
     # ======================================================
 
     st.header(
@@ -411,7 +559,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 10 - EQUIPMENT RECOMMENDATION
+    # SECTION 17 - EQUIPMENT RECOMMENDATION
     # ======================================================
 
     st.subheader(
@@ -467,7 +615,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 11 - AI SOLAR ADVISOR
+    # SECTION 18 - AI SOLAR ADVISOR
     # ======================================================
 
     st.divider()
@@ -480,7 +628,7 @@ if design_button:
 
     recommendations = generate_ai_recommendations(
 
-        location=location,
+        location=location_description,
 
         battery_type=battery_type,
 
@@ -504,12 +652,12 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 12 - PDF REPORT DATA
+    # SECTION 19 - PDF REPORT DATA
     # ======================================================
 
     report_data = {
 
-        "location": location,
+        "location": location_description,
 
         "energy": energy,
 
@@ -548,7 +696,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 13 - PDF REPORT
+    # SECTION 20 - PDF REPORT
     # ======================================================
 
     st.divider()
@@ -580,7 +728,7 @@ if design_button:
 
 
 # ==========================================================
-# SECTION 14 - FOOTER
+# SECTION 21 - FOOTER
 # ==========================================================
 
 st.divider()
@@ -588,9 +736,9 @@ st.divider()
 
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.0
+    Solar PV Designer Pro Africa™ v2.1
 
-    AI-Ready Renewable Energy Design Platform
+    Global Location Engine — Development Version
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
