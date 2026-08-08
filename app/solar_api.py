@@ -1,7 +1,7 @@
 # ==========================================================
 # Solar PV Designer Pro Africa™
 # NASA POWER Solar Resource Engine
-# Version 2.1.3
+# Version 2.1.4
 # ==========================================================
 
 import requests
@@ -19,10 +19,47 @@ NASA_POWER_URL = (
 
 
 # ==========================================================
+# NASA POWER CLIMATOLOGY PERIOD
+# ==========================================================
+
+NASA_START_YEAR = 2001
+NASA_END_YEAR = 2020
+
+
+# ==========================================================
+# MONTH DEFINITIONS
+# ==========================================================
+
+MONTHS = {
+
+    "JAN": "January",
+    "FEB": "February",
+    "MAR": "March",
+    "APR": "April",
+    "MAY": "May",
+    "JUN": "June",
+    "JUL": "July",
+    "AUG": "August",
+    "SEP": "September",
+    "OCT": "October",
+    "NOV": "November",
+    "DEC": "December"
+
+}
+
+
+# ==========================================================
 # SAFE FLOAT CONVERSION
 # ==========================================================
 
 def safe_float(value):
+
+    """
+    Safely convert a value to float.
+
+    Returns None if the value is missing
+    or cannot be converted.
+    """
 
     if value is None:
         return None
@@ -31,7 +68,13 @@ def safe_float(value):
 
         number = float(value)
 
+        # Check for NaN
         if number != number:
+            return None
+
+        # NASA POWER may use -999 as a
+        # missing-data indicator.
+        if number <= -900:
             return None
 
         return number
@@ -42,7 +85,7 @@ def safe_float(value):
 
 
 # ==========================================================
-# GET SOLAR RESOURCE
+# GET NASA POWER SOLAR RESOURCE
 # ==========================================================
 
 @st.cache_data(ttl=86400)
@@ -53,32 +96,54 @@ def get_solar_resource(
 
     """
     Retrieve climatological solar-resource
-    and temperature data from NASA POWER.
+    and temperature information from NASA POWER.
+
+    Parameters
+    ----------
+    latitude : float
+        Geographic latitude.
+
+    longitude : float
+        Geographic longitude.
+
+    Returns
+    -------
+    dict
+        Processed solar-resource information.
     """
 
-    parameters = (
-        "ALLSKY_SFC_SW_DWN,"
-        "T2M"
-    )
-
+    # ======================================================
+    # REQUEST PARAMETERS
+    # ======================================================
 
     request_parameters = {
 
-        "parameters": parameters,
+        "parameters":
+            "ALLSKY_SFC_SW_DWN,T2M",
 
-        "community": "RE",
+        "community":
+            "RE",
 
-        "longitude": longitude,
+        "longitude":
+            longitude,
 
-        "latitude": latitude,
+        "latitude":
+            latitude,
 
-        "format": "JSON"
+        "start":
+            NASA_START_YEAR,
+
+        "end":
+            NASA_END_YEAR,
+
+        "format":
+            "JSON"
 
     }
 
 
     # ======================================================
-    # NASA POWER REQUEST
+    # REQUEST NASA POWER
     # ======================================================
 
     try:
@@ -94,6 +159,10 @@ def get_solar_resource(
         )
 
 
+        # --------------------------------------------------
+        # HTTP ERROR
+        # --------------------------------------------------
+
         if response.status_code != 200:
 
             try:
@@ -104,20 +173,38 @@ def get_solar_resource(
 
                 error_data = {}
 
-            error_message = (
-                error_data
-                .get("messages", "")
+
+            messages = (
+                error_data.get(
+                    "messages",
+                    ""
+                )
             )
+
+
+            if isinstance(
+                messages,
+                list
+            ):
+
+                messages = " ".join(
+                    str(message)
+                    for message in messages
+                )
 
 
             raise Exception(
 
                 f"NASA POWER returned HTTP "
                 f"{response.status_code}. "
-                f"{error_message}"
+                f"{messages}"
 
             )
 
+
+        # --------------------------------------------------
+        # JSON RESPONSE
+        # --------------------------------------------------
 
         data = response.json()
 
@@ -125,60 +212,98 @@ def get_solar_resource(
     except requests.exceptions.Timeout:
 
         raise Exception(
-            "NASA POWER request timed out."
+
+            "NASA POWER request timed out. "
+            "Please try again."
+
         )
 
 
     except requests.exceptions.RequestException as error:
 
         raise Exception(
+
             f"NASA POWER request failed: {error}"
+
         )
 
 
     except ValueError:
 
         raise Exception(
+
             "NASA POWER returned invalid JSON."
+
         )
 
 
     # ======================================================
-    # RESPONSE STRUCTURE
+    # RESPONSE VALIDATION
     # ======================================================
 
+    if not isinstance(
+        data,
+        dict
+    ):
+
+        raise Exception(
+
+            "NASA POWER returned an "
+            "unexpected response."
+
+        )
+
+
     properties = data.get(
+
         "properties",
+
         {}
+
     )
 
 
     parameter_data = properties.get(
+
         "parameter",
+
         {}
+
     )
 
 
     if not parameter_data:
 
         raise Exception(
+
             "NASA POWER returned no parameter data."
+
         )
 
 
     # ======================================================
-    # SOLAR DATA
+    # EXTRACT SOLAR PARAMETER
     # ======================================================
 
     solar_parameter = parameter_data.get(
+
         "ALLSKY_SFC_SW_DWN",
+
         {}
+
     )
 
 
+    # ======================================================
+    # EXTRACT TEMPERATURE PARAMETER
+    # ======================================================
+
     temperature_parameter = parameter_data.get(
+
         "T2M",
+
         {}
+
     )
 
 
@@ -199,77 +324,63 @@ def get_solar_resource(
 
 
     # ======================================================
-    # MONTH NAMES
-    # ======================================================
-
-    month_names = {
-
-        "01": "January",
-        "02": "February",
-        "03": "March",
-        "04": "April",
-        "05": "May",
-        "06": "June",
-        "07": "July",
-        "08": "August",
-        "09": "September",
-        "10": "October",
-        "11": "November",
-        "12": "December"
-
-    }
-
-
-    # ======================================================
-    # EXTRACT SOLAR VALUES
+    # EXTRACT MONTHLY SOLAR DATA
     # ======================================================
 
     monthly_solar = {}
 
 
-    for key, value in solar_parameter.items():
+    for month_code in MONTHS:
 
-        key_string = str(key)
+        value = solar_parameter.get(
 
+            month_code
 
-        if key_string in month_names:
-
-            number = safe_float(
-                value
-            )
+        )
 
 
-            if number is not None:
+        number = safe_float(
 
-                monthly_solar[
-                    key_string
-                ] = number
+            value
+
+        )
+
+
+        if number is not None:
+
+            monthly_solar[
+                month_code
+            ] = number
 
 
     # ======================================================
-    # EXTRACT TEMPERATURE VALUES
+    # EXTRACT MONTHLY TEMPERATURE DATA
     # ======================================================
 
     monthly_temperature = {}
 
 
-    for key, value in temperature_parameter.items():
+    for month_code in MONTHS:
 
-        key_string = str(key)
+        value = temperature_parameter.get(
 
+            month_code
 
-        if key_string in month_names:
-
-            number = safe_float(
-                value
-            )
+        )
 
 
-            if number is not None:
+        number = safe_float(
 
-                monthly_temperature[
-                    key_string
-                ] = number
+            value
+
+        )
+
+
+        if number is not None:
+
+            monthly_temperature[
+                month_code
+            ] = number
 
 
     # ======================================================
@@ -278,15 +389,27 @@ def get_solar_resource(
 
     if not monthly_solar:
 
+        # Provide diagnostic information.
+        # This will help us troubleshoot future
+        # NASA POWER response changes.
+
+        returned_parameters = list(
+            parameter_data.keys()
+        )
+
+
         raise Exception(
+
             "NASA POWER responded successfully, "
-            "but no monthly solar-resource values "
-            "were found."
+            "but no usable monthly solar-resource "
+            "values were found. Returned parameters: "
+            f"{returned_parameters}"
+
         )
 
 
     # ======================================================
-    # AVERAGE SOLAR RESOURCE
+    # CALCULATE AVERAGE SOLAR RESOURCE
     # ======================================================
 
     average_solar = (
@@ -303,7 +426,7 @@ def get_solar_resource(
 
 
     # ======================================================
-    # AVERAGE TEMPERATURE
+    # CALCULATE AVERAGE TEMPERATURE
     # ======================================================
 
     if monthly_temperature:
@@ -326,10 +449,10 @@ def get_solar_resource(
 
 
     # ======================================================
-    # BEST MONTH
+    # BEST SOLAR MONTH
     # ======================================================
 
-    best_month_key = max(
+    best_month_code = max(
 
         monthly_solar,
 
@@ -339,17 +462,19 @@ def get_solar_resource(
 
 
     best_month_value = (
+
         monthly_solar[
-            best_month_key
+            best_month_code
         ]
+
     )
 
 
     # ======================================================
-    # WORST MONTH
+    # WORST SOLAR MONTH
     # ======================================================
 
-    worst_month_key = min(
+    worst_month_code = min(
 
         monthly_solar,
 
@@ -359,51 +484,43 @@ def get_solar_resource(
 
 
     worst_month_value = (
+
         monthly_solar[
-            worst_month_key
+            worst_month_code
         ]
+
     )
 
 
     # ======================================================
-    # MONTHLY DISPLAY
+    # MONTHLY DISPLAY DATA
     # ======================================================
 
     monthly_display = []
 
 
-    for month_number in range(
-        1,
-        13
-    ):
-
-        month_key = (
-            f"{month_number:02d}"
-        )
-
+    for month_code, month_name in MONTHS.items():
 
         monthly_display.append({
 
             "month":
-                month_names[
-                    month_key
-                ],
+                month_name,
 
             "solar_resource":
                 monthly_solar.get(
-                    month_key
+                    month_code
                 ),
 
             "temperature":
                 monthly_temperature.get(
-                    month_key
+                    month_code
                 )
 
         })
 
 
     # ======================================================
-    # RETURN DATA
+    # RETURN RESULT
     # ======================================================
 
     return {
@@ -430,16 +547,16 @@ def get_solar_resource(
             average_temperature,
 
         "best_month":
-            month_names[
-                best_month_key
+            MONTHS[
+                best_month_code
             ],
 
         "best_month_value":
             best_month_value,
 
         "worst_month":
-            month_names[
-                worst_month_key
+            MONTHS[
+                worst_month_code
             ],
 
         "worst_month_value":
@@ -447,6 +564,9 @@ def get_solar_resource(
 
         "data_source":
             "NASA POWER",
+
+        "climatology_period":
+            f"{NASA_START_YEAR}-{NASA_END_YEAR}",
 
         "api_url":
             NASA_POWER_URL
@@ -462,8 +582,18 @@ def calculate_peak_sun_hours(
     average_solar
 ):
 
+    """
+    Convert average daily solar irradiation
+    in kWh/m²/day into equivalent peak sun hours.
+
+    For this solar-resource quantity, the numerical
+    value is approximately equivalent to peak sun hours.
+    """
+
     value = safe_float(
+
         average_solar
+
     )
 
 
@@ -476,24 +606,32 @@ def calculate_peak_sun_hours(
 
 
 # ==========================================================
-# SUMMARY
+# CREATE SOLAR SUMMARY
 # ==========================================================
 
 def create_solar_summary(
     solar_data
 ):
 
+    """
+    Create a simplified summary for the UI.
+    """
+
     average_solar = (
+
         solar_data.get(
             "average_solar"
         )
+
     )
 
 
     average_temperature = (
+
         solar_data.get(
             "average_temperature"
         )
+
     )
 
 
@@ -531,19 +669,29 @@ def create_solar_summary(
             solar_data.get(
                 "data_source",
                 "NASA POWER"
+            ),
+
+        "climatology_period":
+            solar_data.get(
+                "climatology_period",
+                f"{NASA_START_YEAR}-{NASA_END_YEAR}"
             )
 
     }
 
 
 # ==========================================================
-# API TEST
+# TEST NASA POWER CONNECTION
 # ==========================================================
 
 def test_solar_api(
     latitude,
     longitude
 ):
+
+    """
+    Test the NASA POWER connection.
+    """
 
     try:
 
