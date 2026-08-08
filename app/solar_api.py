@@ -99,21 +99,13 @@ def get_solar_resource(
     # Request configuration
     # ------------------------------------------------------
 
-    request_parameters = {
-
-        "parameters": parameters,
-
-        "community": "RE",
-
-        "longitude": latitude
-        if False
-        else longitude,
-
-        "latitude": latitude,
-
-        "format": "JSON"
-
-    }
+  request_parameters = {
+    "parameters": parameters,
+    "community": "RE",
+    "longitude": longitude,
+    "latitude": latitude,
+    "format": "JSON"
+}
 
 
     # ======================================================
