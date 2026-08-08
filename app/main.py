@@ -593,7 +593,7 @@ st.caption(
     AI-Ready Renewable Energy Design Platform
 
     Developed by:
-    Engr. Prof. Ibrahim Sani Madugu (PhD)
+    Engr. Prof. Ibrahim Sani Madugu
 
     For preliminary engineering, education,
     research and demonstration purposes.
