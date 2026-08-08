@@ -2,55 +2,20 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# Real NASA POWER Graph Integration Test
+# Real NASA POWER → Analytics → Graph Test
 # Version: 2.3.0
 #
-# Purpose:
-# Test the complete pipeline:
+# IMPORTANT:
+# This test does NOT modify solar_api.py or main.py.
 #
-# Location
-#     ↓
-# Coordinates
-#     ↓
-# NASA POWER API
-#     ↓
-# Solar Analytics
-#     ↓
-# Graph Visualization
-#
-# This is a TEST PAGE.
-# It does NOT modify main.py.
-#
-# Developed by:
-# Engr. Prof. Ibrahim Sani Madugu
-#
-# ==========================================================
-
-
-# ==========================================================
-# SECTION 1 - IMPORTS
 # ==========================================================
 
 import streamlit as st
-
-from solar_api import (
-    get_nasa_power_data
-)
-
-from solar_analytics import (
-    analyze_solar_resource
-)
-
-from graph_visualization import (
-    create_solar_resource_chart,
-    create_temperature_chart,
-    create_solar_bar_chart,
-    create_combined_dataframe
-)
+import inspect
 
 
 # ==========================================================
-# SECTION 2 - PAGE CONFIGURATION
+# PAGE CONFIGURATION
 # ==========================================================
 
 st.set_page_config(
@@ -61,7 +26,7 @@ st.set_page_config(
 
 
 # ==========================================================
-# SECTION 3 - HEADER
+# HEADER
 # ==========================================================
 
 st.title(
@@ -72,21 +37,266 @@ st.subheader(
     "Real NASA POWER → Analytics → Graph Test"
 )
 
+
 st.write(
     """
-    This test retrieves real monthly solar-resource and
-    temperature data from NASA POWER using geographical
-    coordinates, processes the data and displays
-    interactive graphs.
+    This page tests the complete pipeline:
+
+    Coordinates → NASA POWER → Solar Analytics → Graphs
     """
 )
 
 
 # ==========================================================
-# SECTION 4 - LOCATION INPUT
+# LOAD MODULES
 # ==========================================================
 
-st.sidebar.header(
+try:
+
+    import solar_api
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Could not load solar_api.py
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+try:
+
+    from solar_analytics import (
+        analyze_solar_resource
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Could not load solar_analytics.py
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+try:
+
+    from graph_visualization import (
+        create_solar_resource_chart,
+        create_temperature_chart,
+        create_solar_bar_chart,
+        create_combined_dataframe
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Could not load graph_visualization.py
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# SECTION 1 - DETECT NASA FUNCTIONS
+# ==========================================================
+
+st.header(
+    "🔎 NASA POWER Module Check"
+)
+
+
+available_functions = []
+
+
+for name in dir(solar_api):
+
+    if name.startswith("_"):
+        continue
+
+    try:
+
+        attribute = getattr(
+            solar_api,
+            name
+        )
+
+        if callable(attribute):
+
+            available_functions.append(
+                name
+            )
+
+    except Exception:
+
+        pass
+
+
+if available_functions:
+
+    st.success(
+        "✅ solar_api.py loaded successfully."
+    )
+
+    with st.expander(
+        "View functions available in solar_api.py"
+    ):
+
+        st.write(
+            available_functions
+        )
+
+else:
+
+    st.warning(
+        "No callable functions were detected in solar_api.py."
+    )
+
+
+# ==========================================================
+# FIND LIKELY NASA FUNCTION
+# ==========================================================
+
+preferred_names = [
+
+    "fetch_nasa_power_data",
+
+    "get_nasa_power_data",
+
+    "get_nasa_power",
+
+    "fetch_nasa_power",
+
+    "request_nasa_power",
+
+    "get_solar_data",
+
+    "fetch_solar_data",
+
+    "get_power_data",
+
+    "fetch_power_data",
+
+    "get_nasa_data",
+
+    "fetch_nasa_data"
+
+]
+
+
+nasa_function = None
+
+nasa_function_name = None
+
+
+for function_name in preferred_names:
+
+    if hasattr(
+        solar_api,
+        function_name
+    ):
+
+        possible_function = getattr(
+            solar_api,
+            function_name
+        )
+
+        if callable(
+            possible_function
+        ):
+
+            nasa_function = (
+                possible_function
+            )
+
+            nasa_function_name = (
+                function_name
+            )
+
+            break
+
+
+# ==========================================================
+# IF NO FUNCTION FOUND
+# ==========================================================
+
+if nasa_function is None:
+
+    st.error(
+        """
+        ❌ No compatible NASA POWER function was
+        automatically identified.
+
+        Your solar_api.py is loaded successfully,
+        but its NASA function has a different name.
+        """
+    )
+
+
+    st.info(
+        """
+        Please look at the function list above.
+
+        We will use the exact function already present
+        in your working solar_api.py.
+        """
+    )
+
+
+    st.stop()
+
+
+st.success(
+    f"NASA POWER function detected: `{nasa_function_name}()`"
+)
+
+
+# ==========================================================
+# FUNCTION SIGNATURE
+# ==========================================================
+
+try:
+
+    function_signature = inspect.signature(
+        nasa_function
+    )
+
+    with st.expander(
+        "🔍 View NASA function signature"
+    ):
+
+        st.code(
+            f"{nasa_function_name}{function_signature}"
+        )
+
+except Exception:
+
+    pass
+
+
+# ==========================================================
+# SECTION 2 - LOCATION
+# ==========================================================
+
+st.header(
     "📍 Test Location"
 )
 
@@ -113,8 +323,6 @@ longitude = st.sidebar.number_input(
 
 st.sidebar.info(
     f"""
-    **Coordinates**
-
     Latitude: {latitude:.4f}°
 
     Longitude: {longitude:.4f}°
@@ -123,650 +331,465 @@ st.sidebar.info(
 
 
 # ==========================================================
-# SECTION 5 - RETRIEVE NASA POWER DATA
+# SECTION 3 - RETRIEVE NASA DATA
 # ==========================================================
 
-st.header(
-    "📡 NASA POWER Data"
-)
-
-
-get_data_button = st.button(
+run_test = st.button(
     "🚀 Retrieve NASA POWER Data",
     type="primary"
 )
 
 
-if get_data_button:
-
-    with st.spinner(
-        "Connecting to NASA POWER..."
-    ):
-
-        try:
-
-            nasa_data = get_nasa_power_data(
-                latitude,
-                longitude
-            )
-
-        except Exception as error:
-
-            st.error(
-                f"""
-                ❌ NASA POWER request failed.
-
-                Error:
-
-                {error}
-                """
-            )
-
-            st.stop()
-
-
-    # ======================================================
-    # NASA RESPONSE VALIDATION
-    # ======================================================
-
-    if not nasa_data:
-
-        st.error(
-            "NASA POWER returned no data."
-        )
-
-        st.stop()
-
-
-    st.success(
-        "✅ NASA POWER data retrieved successfully."
-    )
-
-
-    # ======================================================
-    # LOCATION INFORMATION
-    # ======================================================
-
-    location_col1, location_col2 = (
-        st.columns(2)
-    )
-
-
-    location_col1.metric(
-        "Latitude",
-        f"{latitude:.4f}°"
-    )
-
-
-    location_col2.metric(
-        "Longitude",
-        f"{longitude:.4f}°"
-    )
-
-
-    # ======================================================
-    # RAW NASA DATA
-    # ======================================================
-
-    with st.expander(
-        "🔍 View Raw NASA POWER Response"
-    ):
-
-        st.json(
-            nasa_data
-        )
-
-
-    # ======================================================
-    # SECTION 6 - ANALYZE NASA DATA
-    # ======================================================
-
-    st.header(
-        "🧮 Solar Analytics"
-    )
-
-
-    try:
-
-        analytics = analyze_solar_resource(
-            nasa_data
-        )
-
-    except Exception as error:
-
-        st.error(
-            f"""
-            ❌ Solar analytics failed.
-
-            Error:
-
-            {error}
-            """
-        )
-
-        st.stop()
-
-
-    monthly_solar = analytics[
-        "monthly_solar"
-    ]
-
-
-    monthly_temperature = analytics[
-        "monthly_temperature"
-    ]
-
-
-    # ======================================================
-    # VALIDATE MONTHLY DATA
-    # ======================================================
-
-    solar_count = len(
-        monthly_solar
-    )
-
-
-    temperature_count = len(
-        monthly_temperature
-    )
-
-
-    validation_col1, validation_col2 = (
-        st.columns(2)
-    )
-
-
-    with validation_col1:
-
-        if solar_count > 0:
-
-            st.success(
-                f"""
-                ✅ Solar data detected.
-
-                {solar_count} monthly values found.
-                """
-            )
-
-        else:
-
-            st.error(
-                "❌ No monthly solar values found."
-            )
-
-
-    with validation_col2:
-
-        if temperature_count > 0:
-
-            st.success(
-                f"""
-                ✅ Temperature data detected.
-
-                {temperature_count} monthly values found.
-                """
-            )
-
-        else:
-
-            st.error(
-                "❌ No monthly temperature values found."
-            )
-
-
-    # ======================================================
-    # STOP IF NO USABLE DATA
-    # ======================================================
-
-    if (
-        solar_count == 0
-        and
-        temperature_count == 0
-    ):
-
-        st.error(
-            """
-            NASA POWER responded, but the Solar Analytics
-            module could not find usable monthly values.
-
-            The raw NASA response above can be inspected
-            to determine the returned data structure.
-            """
-        )
-
-        st.stop()
-
-
-    # ======================================================
-    # SECTION 7 - SOLAR STATISTICS
-    # ======================================================
-
-    st.header(
-        "☀️ Solar Resource Summary"
-    )
-
-
-    solar_stats = analytics[
-        "solar_statistics"
-    ]
-
-
-    solar_col1, solar_col2, solar_col3, solar_col4 = (
-        st.columns(4)
-    )
-
-
-    if solar_stats[
-        "annual_average"
-    ] is not None:
-
-        solar_col1.metric(
-            "Annual Average",
-            f"{solar_stats['annual_average']:.2f}"
-        )
-
-    else:
-
-        solar_col1.metric(
-            "Annual Average",
-            "Unavailable"
-        )
-
-
-    if solar_stats[
-        "maximum"
-    ] is not None:
-
-        solar_col2.metric(
-            "Maximum",
-            f"{solar_stats['maximum']:.2f}"
-        )
-
-    else:
-
-        solar_col2.metric(
-            "Maximum",
-            "Unavailable"
-        )
-
-
-    solar_col3.metric(
-        "Best Month",
-        solar_stats[
-            "best_month"
-        ]
-        or
-        "Unavailable"
-    )
-
-
-    solar_col4.metric(
-        "Lowest Month",
-        solar_stats[
-            "lowest_month"
-        ]
-        or
-        "Unavailable"
-    )
-
-
-    # ======================================================
-    # SECTION 8 - TEMPERATURE SUMMARY
-    # ======================================================
-
-    st.header(
-        "🌡️ Temperature Summary"
-    )
-
-
-    temperature_stats = analytics[
-        "temperature_statistics"
-    ]
-
-
-    temp_col1, temp_col2, temp_col3, temp_col4 = (
-        st.columns(4)
-    )
-
-
-    if temperature_stats[
-        "annual_average"
-    ] is not None:
-
-        temp_col1.metric(
-            "Annual Average",
-            (
-                f"{temperature_stats['annual_average']:.1f} °C"
-            )
-        )
-
-    else:
-
-        temp_col1.metric(
-            "Annual Average",
-            "Unavailable"
-        )
-
-
-    if temperature_stats[
-        "maximum"
-    ] is not None:
-
-        temp_col2.metric(
-            "Maximum",
-            (
-                f"{temperature_stats['maximum']:.1f} °C"
-            )
-        )
-
-    else:
-
-        temp_col2.metric(
-            "Maximum",
-            "Unavailable"
-        )
-
-
-    temp_col3.metric(
-        "Hottest Month",
-        temperature_stats[
-            "hottest_month"
-        ]
-        or
-        "Unavailable"
-    )
-
-
-    temp_col4.metric(
-        "Coolest Month",
-        temperature_stats[
-            "coolest_month"
-        ]
-        or
-        "Unavailable"
-    )
-
-
-    # ======================================================
-    # SECTION 9 - SOLAR RESOURCE GRAPH
-    # ======================================================
-
-    st.header(
-        "☀️ Real Monthly Solar Resource"
-    )
-
-
-    solar_chart = create_solar_resource_chart(
-        monthly_solar
-    )
-
-
-    if solar_chart is not None:
-
-        st.plotly_chart(
-            solar_chart,
-            use_container_width=True
-        )
-
-    else:
-
-        st.warning(
-            "Solar resource graph could not be generated."
-        )
-
-
-    # ======================================================
-    # SECTION 10 - TEMPERATURE GRAPH
-    # ======================================================
-
-    st.header(
-        "🌡️ Real Monthly Temperature"
-    )
-
-
-    temperature_chart = create_temperature_chart(
-        monthly_temperature
-    )
-
-
-    if temperature_chart is not None:
-
-        st.plotly_chart(
-            temperature_chart,
-            use_container_width=True
-        )
-
-    else:
-
-        st.warning(
-            "Temperature graph could not be generated."
-        )
-
-
-    # ======================================================
-    # SECTION 11 - SOLAR BAR GRAPH
-    # ======================================================
-
-    st.header(
-        "📊 Monthly Solar Resource — Bar Chart"
-    )
-
-
-    solar_bar_chart = create_solar_bar_chart(
-        monthly_solar
-    )
-
-
-    if solar_bar_chart is not None:
-
-        st.plotly_chart(
-            solar_bar_chart,
-            use_container_width=True
-        )
-
-    else:
-
-        st.warning(
-            "Solar bar chart could not be generated."
-        )
-
-
-    # ======================================================
-    # SECTION 12 - COMBINED DATA
-    # ======================================================
-
-    st.header(
-        "📋 Monthly Solar & Temperature Data"
-    )
-
-
-    combined_data = create_combined_dataframe(
-        monthly_solar,
-        monthly_temperature
-    )
-
-
-    if not combined_data.empty:
-
-        st.dataframe(
-            combined_data,
-            use_container_width=True
-        )
-
-    else:
-
-        st.warning(
-            "Combined monthly data could not be created."
-        )
-
-
-    # ======================================================
-    # SECTION 13 - SEASONAL ANALYSIS
-    # ======================================================
-
-    st.header(
-        "📅 Seasonal Solar Analysis"
-    )
-
-
-    seasonal = analytics[
-        "seasonal_analysis"
-    ]
-
-
-    seasonal_col1, seasonal_col2, seasonal_col3 = (
-        st.columns(3)
-    )
-
-
-    with seasonal_col1:
-
-        st.subheader(
-            "☀️ High Solar"
-        )
-
-        high_months = seasonal[
-            "high_solar_months"
-        ]
-
-        if high_months:
-
-            st.write(
-                ", ".join(
-                    high_months
-                )
-            )
-
-        else:
-
-            st.write(
-                "None identified"
-            )
-
-
-    with seasonal_col2:
-
-        st.subheader(
-            "☀️ Medium Solar"
-        )
-
-        medium_months = seasonal[
-            "medium_solar_months"
-        ]
-
-        if medium_months:
-
-            st.write(
-                ", ".join(
-                    medium_months
-                )
-            )
-
-        else:
-
-            st.write(
-                "None identified"
-            )
-
-
-    with seasonal_col3:
-
-        st.subheader(
-            "☁️ Low Solar"
-        )
-
-        low_months = seasonal[
-            "low_solar_months"
-        ]
-
-        if low_months:
-
-            st.write(
-                ", ".join(
-                    low_months
-                )
-            )
-
-        else:
-
-            st.write(
-                "None identified"
-            )
-
-
-    # ======================================================
-    # SECTION 14 - FINAL TEST STATUS
-    # ======================================================
-
-    st.divider()
-
-
-    if (
-        solar_chart is not None
-        and
-        temperature_chart is not None
-        and
-        solar_bar_chart is not None
-    ):
-
-        st.success(
-            """
-            🎉 REAL NASA POWER GRAPH TEST PASSED
-
-            The complete data pipeline is working:
-
-            📍 Coordinates
-                    ↓
-            📡 NASA POWER
-                    ↓
-            🧮 Solar Analytics
-                    ↓
-            📊 Interactive Graphs
-
-            The real NASA POWER data is now successfully
-            being processed and visualized.
-            """
-        )
-
-    else:
-
-        st.warning(
-            """
-            ⚠️ NASA POWER DATA WAS RETRIEVED, BUT ONE OR
-            MORE GRAPHS COULD NOT BE GENERATED.
-
-            We will troubleshoot the affected component
-            before integrating it into main.py.
-            """
-        )
-
-
-# ==========================================================
-# SECTION 15 - INSTRUCTIONS
-# ==========================================================
-
-else:
+if not run_test:
 
     st.info(
         """
-        👈 Enter or modify the latitude and longitude
-        in the sidebar, then click:
+        Enter the coordinates and click:
 
         **🚀 Retrieve NASA POWER Data**
 
-        Suggested test location:
+        Suggested test:
 
         Kampala, Uganda
 
-        Latitude: **0.3476**
+        Latitude: 0.3476
 
-        Longitude: **32.5825**
+        Longitude: 32.5825
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# CALL NASA FUNCTION
+# ==========================================================
+
+st.header(
+    "📡 NASA POWER Connection"
+)
+
+
+try:
+
+    # ------------------------------------------------------
+    # First attempt:
+    # latitude, longitude
+    # ------------------------------------------------------
+
+    try:
+
+        nasa_data = nasa_function(
+            latitude,
+            longitude
+        )
+
+    except TypeError:
+
+        # --------------------------------------------------
+        # Second attempt:
+        # keyword arguments
+        # --------------------------------------------------
+
+        try:
+
+            nasa_data = nasa_function(
+                latitude=latitude,
+                longitude=longitude
+            )
+
+        except TypeError:
+
+            # ----------------------------------------------
+            # Third attempt:
+            # lat/lon
+            # ----------------------------------------------
+
+            nasa_data = nasa_function(
+                lat=latitude,
+                lon=longitude
+            )
+
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ NASA POWER request failed.
+
+        Function used:
+
+        `{nasa_function_name}()`
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# NASA DATA VALIDATION
+# ==========================================================
+
+if nasa_data is None:
+
+    st.error(
+        """
+        ❌ NASA POWER function returned None.
+        """
+    )
+
+    st.stop()
+
+
+st.success(
+    "✅ NASA POWER data retrieved successfully."
+)
+
+
+# ==========================================================
+# RAW DATA
+# ==========================================================
+
+with st.expander(
+    "🔍 View Raw NASA POWER Data"
+):
+
+    st.json(
+        nasa_data
+    )
+
+
+# ==========================================================
+# SECTION 4 - SOLAR ANALYTICS
+# ==========================================================
+
+st.header(
+    "🧮 Solar Analytics"
+)
+
+
+try:
+
+    analytics = analyze_solar_resource(
+        nasa_data
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar Analytics failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# EXTRACT DATA
+# ==========================================================
+
+monthly_solar = analytics.get(
+    "monthly_solar",
+    []
+)
+
+
+monthly_temperature = analytics.get(
+    "monthly_temperature",
+    []
+)
+
+
+solar_count = len(
+    monthly_solar
+)
+
+
+temperature_count = len(
+    monthly_temperature
+)
+
+
+# ==========================================================
+# DATA VALIDATION
+# ==========================================================
+
+validation_col1, validation_col2 = (
+    st.columns(2)
+)
+
+
+with validation_col1:
+
+    if solar_count > 0:
+
+        st.success(
+            f"☀️ {solar_count} solar values detected."
+        )
+
+    else:
+
+        st.error(
+            "❌ No solar values detected."
+        )
+
+
+with validation_col2:
+
+    if temperature_count > 0:
+
+        st.success(
+            f"🌡️ {temperature_count} temperature values detected."
+        )
+
+    else:
+
+        st.error(
+            "❌ No temperature values detected."
+        )
+
+
+# ==========================================================
+# STOP IF NO DATA
+# ==========================================================
+
+if (
+    solar_count == 0
+    and
+    temperature_count == 0
+):
+
+    st.error(
+        """
+        NASA POWER returned data, but
+        solar_analytics.py could not extract
+        monthly solar or temperature values.
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# SECTION 5 - SOLAR GRAPH
+# ==========================================================
+
+st.header(
+    "☀️ Real Monthly Solar Resource"
+)
+
+
+try:
+
+    solar_chart = (
+        create_solar_resource_chart(
+            monthly_solar
+        )
+    )
+
+except Exception as error:
+
+    solar_chart = None
+
+    st.error(
+        f"Solar graph error: {error}"
+    )
+
+
+if solar_chart is not None:
+
+    st.plotly_chart(
+        solar_chart,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Solar resource graph could not be generated."
+    )
+
+
+# ==========================================================
+# SECTION 6 - TEMPERATURE GRAPH
+# ==========================================================
+
+st.header(
+    "🌡️ Real Monthly Temperature"
+)
+
+
+try:
+
+    temperature_chart = (
+        create_temperature_chart(
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    temperature_chart = None
+
+    st.error(
+        f"Temperature graph error: {error}"
+    )
+
+
+if temperature_chart is not None:
+
+    st.plotly_chart(
+        temperature_chart,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Temperature graph could not be generated."
+    )
+
+
+# ==========================================================
+# SECTION 7 - SOLAR BAR GRAPH
+# ==========================================================
+
+st.header(
+    "📊 Monthly Solar Resource — Bar Chart"
+)
+
+
+try:
+
+    solar_bar_chart = (
+        create_solar_bar_chart(
+            monthly_solar
+        )
+    )
+
+except Exception as error:
+
+    solar_bar_chart = None
+
+    st.error(
+        f"Solar bar chart error: {error}"
+    )
+
+
+if solar_bar_chart is not None:
+
+    st.plotly_chart(
+        solar_bar_chart,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Solar bar chart could not be generated."
+    )
+
+
+# ==========================================================
+# SECTION 8 - DATA TABLE
+# ==========================================================
+
+st.header(
+    "📋 Monthly Solar & Temperature Data"
+)
+
+
+try:
+
+    combined_data = (
+        create_combined_dataframe(
+            monthly_solar,
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    combined_data = None
+
+    st.error(
+        f"Combined data error: {error}"
+    )
+
+
+if (
+    combined_data is not None
+    and
+    not combined_data.empty
+):
+
+    st.dataframe(
+        combined_data,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Combined data table could not be generated."
+    )
+
+
+# ==========================================================
+# SECTION 9 - FINAL STATUS
+# ==========================================================
+
+st.divider()
+
+
+if (
+    solar_chart is not None
+    and
+    temperature_chart is not None
+    and
+    solar_bar_chart is not None
+):
+
+    st.success(
+        """
+        🎉 REAL NASA POWER GRAPH TEST PASSED
+
+        The complete pipeline is working:
+
+        📍 Coordinates
+             ↓
+        📡 NASA POWER
+             ↓
+        🧮 Solar Analytics
+             ↓
+        📊 Interactive Graphs
+
+        The system is ready for integration
+        into the main Solar PV Designer Pro application.
+        """
+    )
+
+else:
+
+    st.warning(
+        """
+        ⚠️ NASA POWER data was retrieved, but
+        one or more graphs could not be generated.
         """
     )
 
 
 # ==========================================================
-# SECTION 16 - FOOTER
+# FOOTER
 # ==========================================================
 
 st.divider()
