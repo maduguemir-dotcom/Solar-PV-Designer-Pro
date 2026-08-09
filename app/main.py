@@ -77,6 +77,20 @@ from map_location import (
     format_coordinates
 )
 
+# ==========================================================
+# SOLAR ANALYTICS & GRAPH VISUALIZATION
+# ==========================================================
+
+from solar_analytics import (
+    analyze_solar_resource
+)
+
+from graph_visualization import (
+    create_solar_resource_chart,
+    create_temperature_chart,
+    create_solar_bar_chart,
+    create_combined_dataframe
+)
 
 # ==========================================================
 # SECTION 2 - APPLICATION CONFIGURATION
