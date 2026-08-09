@@ -2,122 +2,157 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# Interactive Map + NASA POWER Test
-# Version: 2.2.2
+# REAL NASA POWER → ANALYTICS → GRAPHS
+# Version: 2.3.0
 #
-# Purpose:
-# Test the complete workflow:
+# Uses the EXISTING:
+#     get_solar_resource()
 #
-# Interactive Map
-#       ↓
-# Latitude / Longitude
-#       ↓
-# NASA POWER
-#       ↓
-# Solar Resource
+# This test does NOT modify main.py or solar_api.py.
 #
-# ==========================================================
-
-
-# ==========================================================
-# SECTION 1 - IMPORTS
 # ==========================================================
 
 import streamlit as st
+import inspect
 
-
-from map_location import (
-    display_location_map,
-    format_coordinates
+from solar_api import (
+    get_solar_resource
 )
 
+from solar_analytics import (
+    analyze_solar_resource
+)
 
-from location_engine import (
-    get_location_solar_resource,
-    get_location_summary
+from graph_visualization import (
+    create_solar_resource_chart,
+    create_temperature_chart,
+    create_solar_bar_chart,
+    create_combined_dataframe
 )
 
 
 # ==========================================================
-# SECTION 2 - PAGE CONFIGURATION
+# PAGE CONFIGURATION
 # ==========================================================
 
 st.set_page_config(
-    page_title="Map + NASA POWER Test",
-    page_icon="🌍",
+    page_title="NASA Solar Graph Test",
+    page_icon="☀️",
     layout="wide"
 )
 
 
 # ==========================================================
-# SECTION 3 - HEADER
+# HEADER
 # ==========================================================
 
 st.title(
-    "🌍 Solar PV Designer Pro Africa™"
+    "☀️ Solar PV Designer Pro Africa™"
 )
 
 st.subheader(
-    "Interactive Map + NASA POWER Test"
+    "Real NASA POWER → Analytics → Graph Test"
 )
-
 
 st.write(
     """
-    This test verifies the complete location workflow
-    before it is integrated into the main Solar PV
-    Designer Pro application.
+    This test uses the existing solar-resource engine
+    to retrieve real location data and send it through
+    the Solar Analytics and Graph Visualization modules.
     """
 )
 
 
 # ==========================================================
-# SECTION 4 - WORKFLOW
+# FUNCTION INFORMATION
 # ==========================================================
 
-st.info(
-    """
-    ### Test Workflow
+with st.expander(
+    "🔎 View get_solar_resource() function"
+):
 
-    **1. Click a location on the map**
+    try:
 
-    ↓
+        st.code(
+            str(
+                inspect.signature(
+                    get_solar_resource
+                )
+            )
+        )
 
-    **2. Capture latitude and longitude**
+    except Exception:
 
-    ↓
+        st.write(
+            "Function signature unavailable."
+        )
 
-    **3. Send coordinates to NASA POWER**
 
-    ↓
+# ==========================================================
+# LOCATION INPUT
+# ==========================================================
 
-    **4. Retrieve solar-resource information**
+st.sidebar.header(
+    "📍 Test Location"
+)
+
+
+latitude = st.sidebar.number_input(
+    "Latitude",
+    min_value=-90.0,
+    max_value=90.0,
+    value=0.3476,
+    step=0.0001,
+    format="%.4f"
+)
+
+
+longitude = st.sidebar.number_input(
+    "Longitude",
+    min_value=-180.0,
+    max_value=180.0,
+    value=32.5825,
+    step=0.0001,
+    format="%.4f"
+)
+
+
+st.sidebar.info(
+    f"""
+    **Coordinates**
+
+    Latitude: {latitude:.4f}°
+
+    Longitude: {longitude:.4f}°
     """
 )
 
 
 # ==========================================================
-# SECTION 5 - INTERACTIVE MAP
+# RETRIEVE SOLAR RESOURCE
 # ==========================================================
 
-st.header(
-    "🗺️ Step 1 — Select Project Location"
+run_test = st.button(
+    "🚀 Get Real Solar Resource",
+    type="primary"
 )
 
 
-selected_location = display_location_map()
+if not run_test:
 
-
-# ==========================================================
-# SECTION 6 - CHECK MAP RESULT
-# ==========================================================
-
-if not selected_location:
-
-    st.warning(
+    st.info(
         """
-        📍 Please click anywhere on the map to select
-        your solar project location.
+        Enter coordinates and click:
+
+        **🚀 Get Real Solar Resource**
+
+        Suggested test:
+
+        Kampala, Uganda
+
+        Latitude: 0.3476
+
+        Longitude: 32.5825
         """
     )
 
@@ -125,384 +160,438 @@ if not selected_location:
 
 
 # ==========================================================
-# SECTION 7 - EXTRACT COORDINATES
+# NASA POWER / SOLAR RESOURCE
 # ==========================================================
-
-latitude = selected_location[
-    "latitude"
-]
-
-
-longitude = selected_location[
-    "longitude"
-]
-
-
-# ==========================================================
-# SECTION 8 - DISPLAY COORDINATES
-# ==========================================================
-
-st.divider()
-
 
 st.header(
-    "📍 Step 2 — Selected Coordinates"
+    "📡 Solar Resource Retrieval"
 )
 
 
-coordinate_col1, coordinate_col2, coordinate_col3 = (
-    st.columns(3)
-)
+try:
 
-
-coordinate_col1.metric(
-    "Latitude",
-    f"{latitude:.6f}°"
-)
-
-
-coordinate_col2.metric(
-    "Longitude",
-    f"{longitude:.6f}°"
-)
-
-
-coordinate_col3.metric(
-    "Status",
-    "Coordinates Captured"
-)
-
-
-st.code(
-    format_coordinates(
-        latitude,
-        longitude
-    )
-)
-
-
-st.success(
-    "✅ Interactive map successfully captured "
-    "the project coordinates."
-)
-
-
-# ==========================================================
-# SECTION 9 - NASA POWER
-# ==========================================================
-
-st.divider()
-
-
-st.header(
-    "☀️ Step 3 — NASA POWER Solar Resource"
-)
-
-
-st.write(
-    f"""
-    The following coordinates will now be sent to
-    NASA POWER:
-
-    **Latitude:** {latitude:.6f}°
-
-    **Longitude:** {longitude:.6f}°
-    """
-)
-
-
-# ==========================================================
-# SECTION 10 - NASA POWER REQUEST
-# ==========================================================
-
-if st.button(
-    "🚀 Retrieve NASA POWER Solar Data",
-    type="primary"
-):
-
-    with st.spinner(
-        "Connecting to NASA POWER..."
-    ):
-
-        try:
-
-            location_result = (
-                get_location_solar_resource(
-
-                    latitude=latitude,
-
-                    longitude=longitude,
-
-                    location_name="Map Selected Location",
-
-                    country=""
-
-                )
-            )
-
-        except Exception as error:
-
-            location_result = {
-
-                "success": False,
-
-                "message": str(error)
-
-            }
-
-
-    # ======================================================
-    # SECTION 11 - NASA RESPONSE
-    # ======================================================
-
-    if not location_result:
-
-        st.error(
-            "NASA POWER returned no response."
+    solar_resource = (
+        get_solar_resource(
+            latitude,
+            longitude
         )
-
-        st.stop()
-
-
-    if not location_result.get(
-        "success",
-        False
-    ):
-
-        st.error(
-            "NASA POWER request failed."
-        )
-
-
-        st.write(
-            location_result.get(
-                "message",
-                "No additional information."
-            )
-        )
-
-        st.stop()
-
-
-    # ======================================================
-    # SECTION 12 - SOLAR SUMMARY
-    # ======================================================
-
-    st.success(
-        "✅ NASA POWER connection successful."
     )
 
+
+except TypeError:
 
     try:
 
-        summary = (
-            get_location_summary(
-                location_result
+        solar_resource = (
+            get_solar_resource(
+                latitude=latitude,
+                longitude=longitude
             )
         )
 
     except Exception as error:
 
         st.error(
-            "NASA POWER data was received, but "
-            "the summary could not be generated."
+            f"""
+            ❌ get_solar_resource() could not be called.
+
+            Error:
+
+            {error}
+            """
         )
+
+        st.stop()
+
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar resource request failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# VALIDATE RESPONSE
+# ==========================================================
+
+if solar_resource is None:
+
+    st.error(
+        """
+        ❌ get_solar_resource() returned no data.
+        """
+    )
+
+    st.stop()
+
+
+st.success(
+    "✅ Solar resource retrieved successfully."
+)
+
+
+# ==========================================================
+# DISPLAY RAW RESPONSE
+# ==========================================================
+
+with st.expander(
+    "🔍 View Solar Resource Response"
+):
+
+    try:
+
+        st.json(
+            solar_resource
+        )
+
+    except Exception:
 
         st.write(
-            str(error)
+            solar_resource
         )
 
-        st.stop()
+
+# ==========================================================
+# ANALYTICS
+# ==========================================================
+
+st.header(
+    "🧮 Solar Analytics"
+)
 
 
-    if not summary:
+try:
+
+    analytics = (
+        analyze_solar_resource(
+            solar_resource
+        )
+    )
+
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar Analytics could not process the
+        returned solar-resource data.
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# EXTRACT MONTHLY DATA
+# ==========================================================
+
+monthly_solar = analytics.get(
+    "monthly_solar",
+    []
+)
+
+
+monthly_temperature = analytics.get(
+    "monthly_temperature",
+    []
+)
+
+
+solar_count = len(
+    monthly_solar
+)
+
+
+temperature_count = len(
+    monthly_temperature
+)
+
+
+# ==========================================================
+# DATA STATUS
+# ==========================================================
+
+status_col1, status_col2 = (
+    st.columns(2)
+)
+
+
+with status_col1:
+
+    if solar_count:
+
+        st.success(
+            f"""
+            ☀️ Solar data available
+
+            {solar_count} monthly values
+            """
+        )
+
+    else:
+
+        st.error(
+            "❌ No monthly solar data found."
+        )
+
+
+with status_col2:
+
+    if temperature_count:
+
+        st.success(
+            f"""
+            🌡️ Temperature data available
+
+            {temperature_count} monthly values
+            """
+        )
+
+    else:
 
         st.warning(
-            "NASA POWER responded, but no solar "
-            "summary was available."
+            "⚠️ No monthly temperature data found."
         )
 
-        st.json(
-            location_result
-        )
 
-        st.stop()
+# ==========================================================
+# SOLAR GRAPH
+# ==========================================================
 
-
-    # ======================================================
-    # SECTION 13 - EXTRACT VALUES
-    # ======================================================
-
-    peak_sun_hours = (
-        summary.get(
-            "peak_sun_hours"
-        )
-    )
+st.header(
+    "☀️ Monthly Solar Resource"
+)
 
 
-    average_temperature = (
-        summary.get(
-            "average_temperature"
+try:
+
+    solar_chart = (
+        create_solar_resource_chart(
+            monthly_solar
         )
     )
 
+except Exception as error:
 
-    location_name = (
-        summary.get(
-            "location",
-            "Map Selected Location"
-        )
+    solar_chart = None
+
+    st.error(
+        f"Solar graph error: {error}"
     )
 
 
-    climatology_period = (
-        summary.get(
-            "climatology_period",
-            "NASA POWER"
-        )
+if solar_chart is not None:
+
+    st.plotly_chart(
+        solar_chart,
+        use_container_width=True
     )
 
+else:
 
-    # ======================================================
-    # SECTION 14 - DISPLAY SOLAR RESOURCE
-    # ======================================================
-
-    st.header(
-        "☀️ Step 4 — Solar Resource Results"
-    )
-
-
-    solar_col1, solar_col2, solar_col3 = (
-        st.columns(3)
-    )
-
-
-    if peak_sun_hours is not None:
-
-        try:
-
-            solar_col1.metric(
-                "Peak Sun Hours",
-                f"{float(peak_sun_hours):.2f} h/day"
-            )
-
-        except (
-            TypeError,
-            ValueError
-        ):
-
-            solar_col1.metric(
-                "Peak Sun Hours",
-                "Unavailable"
-            )
-
-    else:
-
-        solar_col1.metric(
-            "Peak Sun Hours",
-            "Unavailable"
-        )
-
-
-    if average_temperature is not None:
-
-        try:
-
-            solar_col2.metric(
-                "Average Temperature",
-                f"{float(average_temperature):.1f} °C"
-            )
-
-        except (
-            TypeError,
-            ValueError
-        ):
-
-            solar_col2.metric(
-                "Average Temperature",
-                "Unavailable"
-            )
-
-    else:
-
-        solar_col2.metric(
-            "Average Temperature",
-            "Unavailable"
-        )
-
-
-    solar_col3.metric(
-        "Data Source",
-        "NASA POWER"
-    )
-
-
-    st.write(
-        f"""
-        **Location:** {location_name}
-
-        **Climatology:** {climatology_period}
-
-        **Coordinates:** {latitude:.6f}°,
-        {longitude:.6f}°
-        """
-    )
-
-
-    # ======================================================
-    # SECTION 15 - RAW NASA DATA
-    # ======================================================
-
-    st.divider()
-
-
-    with st.expander(
-        "🔎 View NASA POWER Response"
-    ):
-
-        st.json(
-            location_result
-        )
-
-
-    # ======================================================
-    # SECTION 16 - SUCCESS
-    # ======================================================
-
-    st.success(
-        """
-        🎉 **Complete workflow successful!**
-
-        Interactive Map
-
-        ↓
-
-        Latitude / Longitude
-
-        ↓
-
-        NASA POWER
-
-        ↓
-
-        Solar Resource
-        """
+    st.warning(
+        "Solar resource graph could not be generated."
     )
 
 
 # ==========================================================
-# SECTION 17 - FOOTER
+# TEMPERATURE GRAPH
+# ==========================================================
+
+st.header(
+    "🌡️ Monthly Temperature"
+)
+
+
+try:
+
+    temperature_chart = (
+        create_temperature_chart(
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    temperature_chart = None
+
+    st.error(
+        f"Temperature graph error: {error}"
+    )
+
+
+if temperature_chart is not None:
+
+    st.plotly_chart(
+        temperature_chart,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Temperature graph could not be generated."
+    )
+
+
+# ==========================================================
+# SOLAR BAR CHART
+# ==========================================================
+
+st.header(
+    "📊 Solar Resource — Bar Chart"
+)
+
+
+try:
+
+    solar_bar_chart = (
+        create_solar_bar_chart(
+            monthly_solar
+        )
+    )
+
+except Exception as error:
+
+    solar_bar_chart = None
+
+    st.error(
+        f"Solar bar chart error: {error}"
+    )
+
+
+if solar_bar_chart is not None:
+
+    st.plotly_chart(
+        solar_bar_chart,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Solar bar chart could not be generated."
+    )
+
+
+# ==========================================================
+# DATA TABLE
+# ==========================================================
+
+st.header(
+    "📋 Monthly Solar & Temperature Data"
+)
+
+
+try:
+
+    combined_data = (
+        create_combined_dataframe(
+            monthly_solar,
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    combined_data = None
+
+    st.error(
+        f"Data table error: {error}"
+    )
+
+
+if (
+    combined_data is not None
+    and
+    not combined_data.empty
+):
+
+    st.dataframe(
+        combined_data,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Combined data table is unavailable."
+    )
+
+
+# ==========================================================
+# FINAL TEST RESULT
 # ==========================================================
 
 st.divider()
 
 
+if (
+    solar_chart is not None
+    and
+    temperature_chart is not None
+    and
+    solar_bar_chart is not None
+):
+
+    st.success(
+        """
+        🎉 REAL SOLAR GRAPH TEST PASSED
+
+        Complete pipeline:
+
+        📍 Coordinates
+             ↓
+        📡 Solar Resource
+             ↓
+        🧮 Solar Analytics
+             ↓
+        📊 Interactive Graphs
+
+        The graph system is ready for integration
+        into the main application.
+        """
+    )
+
+else:
+
+    st.warning(
+        """
+        ⚠️ Solar data was retrieved, but one or more
+        visualization components still need adjustment.
+        """
+    )
+
+
+# ==========================================================
+# FOOTER
+# ==========================================================
+
+st.divider()
+
 st.caption(
     """
     Solar PV Designer Pro Africa™
-    Map + NASA POWER Integration Test v2.2.2
+    Real Solar Graph Test v2.3.0
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
+
+    For preliminary engineering, education,
+    research and demonstration purposes.
     """
 )
+
