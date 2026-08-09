@@ -2,19 +2,46 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# NASA POWER / SOLAR RESOURCE TEST
+# NASA POWER → SOLAR ANALYTICS → GRAPHS TEST
 # Version: 2.3.0
 #
-# This test uses the confirmed function:
+# Confirmed API function:
 #
-#     get_solar_resource()
+#     get_solar_resource(latitude, longitude)
 #
 # ==========================================================
 
 import streamlit as st
-import inspect
 
-from solar_api import get_solar_resource
+
+# ==========================================================
+# SOLAR API
+# ==========================================================
+
+from solar_api import (
+    get_solar_resource
+)
+
+
+# ==========================================================
+# SOLAR ANALYTICS
+# ==========================================================
+
+from solar_analytics import (
+    analyze_solar_resource
+)
+
+
+# ==========================================================
+# GRAPH VISUALIZATION
+# ==========================================================
+
+from graph_visualization import (
+    create_solar_resource_chart,
+    create_temperature_chart,
+    create_solar_bar_chart,
+    create_combined_dataframe
+)
 
 
 # ==========================================================
@@ -22,7 +49,7 @@ from solar_api import get_solar_resource
 # ==========================================================
 
 st.set_page_config(
-    page_title="Solar Resource Test",
+    page_title="NASA POWER Graph Test",
     page_icon="☀️",
     layout="wide"
 )
@@ -37,51 +64,41 @@ st.title(
 )
 
 st.subheader(
-    "Solar Resource API Test"
+    "NASA POWER → Solar Analytics → Graph Test"
 )
 
 
-st.success(
-    "✅ solar_api.py loaded successfully."
+st.write(
+    """
+    This test verifies the complete solar-data pipeline
+    using the existing production modules.
+    """
 )
 
 
 # ==========================================================
-# SHOW FUNCTION SIGNATURE
+# PIPELINE
 # ==========================================================
 
-st.header(
-    "🔎 Existing Solar Resource Function"
+st.info(
+    """
+    📍 Coordinates
+        ↓
+    📡 NASA POWER / Solar Resource
+        ↓
+    🧮 Solar Analytics
+        ↓
+    📊 Graph Visualization
+    """
 )
 
 
-try:
-
-    signature = inspect.signature(
-        get_solar_resource
-    )
-
-    st.success(
-        "✅ get_solar_resource() found."
-    )
-
-    st.code(
-        f"get_solar_resource{signature}"
-    )
-
-except Exception as error:
-
-    st.error(
-        f"Could not inspect function: {error}"
-    )
-
-
 # ==========================================================
-# LOCATION
+# SIDEBAR
 # ==========================================================
 
 st.sidebar.header(
-    "📍 Test Coordinates"
+    "📍 Test Location"
 )
 
 
@@ -105,138 +122,101 @@ longitude = st.sidebar.number_input(
 )
 
 
+st.sidebar.info(
+    f"""
+    **Coordinates**
+
+    Latitude: {latitude:.4f}°
+
+    Longitude: {longitude:.4f}()
+    """
+)
+
+
 # ==========================================================
-# BUTTON
+# RUN TEST
 # ==========================================================
 
-test_button = st.button(
-    "🚀 Test Solar Resource",
+run_test = st.button(
+    "🚀 Run Complete Solar Analytics Test",
     type="primary"
 )
 
 
-if test_button:
+if not run_test:
 
-    st.header(
-        "📡 Solar Resource Response"
+    st.info(
+        """
+        ### Suggested Test
+
+        **Location:** Kampala, Uganda
+
+        **Latitude:** 0.3476°
+
+        **Longitude:** 32.5825°
+
+        Click **Run Complete Solar Analytics Test**
+        to retrieve and visualize the solar resource.
+        """
     )
 
-
-    solar_resource = None
-
-
-    # ------------------------------------------------------
-    # Attempt 1
-    # ------------------------------------------------------
-
-    try:
-
-        solar_resource = get_solar_resource(
-            latitude,
-            longitude
-        )
-
-        st.success(
-            "✅ Function accepted positional coordinates."
-        )
-
-    except Exception as error1:
-
-        # --------------------------------------------------
-        # Attempt 2
-        # --------------------------------------------------
-
-        try:
-
-            solar_resource = get_solar_resource(
-                latitude=latitude,
-                longitude=longitude
-            )
-
-            st.success(
-                "✅ Function accepted latitude/longitude keywords."
-            )
-
-        except Exception as error2:
-
-            # ----------------------------------------------
-            # Attempt 3
-            # ----------------------------------------------
-
-            try:
-
-                solar_resource = get_solar_resource(
-                    lat=latitude,
-                    lon=longitude
-                )
-
-                st.success(
-                    "✅ Function accepted lat/lon keywords."
-                )
-
-            except Exception as error3:
-
-                st.error(
-                    "❌ get_solar_resource() could not be called."
-                )
+    st.stop()
 
 
-                st.write(
-                    "Attempt 1:"
-                )
+# ==========================================================
+# STEP 1 — SOLAR RESOURCE
+# ==========================================================
 
-                st.code(
-                    str(error1)
-                )
-
-
-                st.write(
-                    "Attempt 2:"
-                )
-
-                st.code(
-                    str(error2)
-                )
+st.header(
+    "1️⃣ 📡 Solar Resource Retrieval"
+)
 
 
-                st.write(
-                    "Attempt 3:"
-                )
+try:
 
-                st.code(
-                    str(error3)
-                )
-
-
-                st.stop()
-
-
-    # ======================================================
-    # RESULT
-    # ======================================================
-
-    if solar_resource is None:
-
-        st.error(
-            "❌ get_solar_resource() returned no data."
-        )
-
-        st.stop()
-
-
-    st.success(
-        "🎉 Solar resource data received!"
+    solar_resource = get_solar_resource(
+        latitude,
+        longitude
     )
 
+except Exception as error:
 
-    # ======================================================
-    # DISPLAY RESPONSE
-    # ======================================================
+    st.error(
+        f"""
+        ❌ Solar resource retrieval failed.
 
-    st.header(
-        "📋 Returned Data"
+        Error:
+
+        {error}
+        """
     )
 
+    st.stop()
+
+
+if solar_resource is None:
+
+    st.error(
+        """
+        ❌ Solar resource function returned no data.
+        """
+    )
+
+    st.stop()
+
+
+st.success(
+    "✅ Solar resource retrieved successfully."
+)
+
+
+# ==========================================================
+# RAW RESPONSE
+# ==========================================================
+
+with st.expander(
+    "🔍 View Raw Solar Resource Data"
+):
 
     if isinstance(
         solar_resource,
@@ -254,38 +234,419 @@ if test_button:
         )
 
 
-    # ======================================================
-    # DATA TYPE
-    # ======================================================
+# ==========================================================
+# STEP 2 — SOLAR ANALYTICS
+# ==========================================================
 
-    st.header(
-        "🔬 Response Information"
+st.header(
+    "2️⃣ 🧮 Solar Analytics"
+)
+
+
+try:
+
+    analytics = analyze_solar_resource(
+        solar_resource
     )
 
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar Analytics failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+    st.stop()
+
+
+if analytics is None:
+
+    st.error(
+        """
+        ❌ Solar Analytics returned no results.
+        """
+    )
+
+    st.stop()
+
+
+st.success(
+    "✅ Solar Analytics processed the data."
+)
+
+
+# ==========================================================
+# ANALYTICS RESPONSE
+# ==========================================================
+
+with st.expander(
+    "🔍 View Analytics Response"
+):
 
     st.write(
-        "Response type:"
-    )
-
-    st.code(
-        type(solar_resource).__name__
+        analytics
     )
 
 
-    if isinstance(
-        solar_resource,
-        dict
-    ):
+# ==========================================================
+# STEP 3 — EXTRACT MONTHLY VALUES
+# ==========================================================
 
-        st.write(
-            "Dictionary keys:"
-        )
+st.header(
+    "3️⃣ 📊 Monthly Data Validation"
+)
 
-        st.write(
-            list(
-                solar_resource.keys()
-            )
+
+# ----------------------------------------------------------
+# Solar data
+# ----------------------------------------------------------
+
+monthly_solar = analytics.get(
+    "monthly_solar",
+    []
+)
+
+
+# ----------------------------------------------------------
+# Temperature data
+# ----------------------------------------------------------
+
+monthly_temperature = analytics.get(
+    "monthly_temperature",
+    []
+)
+
+
+# ==========================================================
+# DATA COUNTS
+# ==========================================================
+
+solar_count = len(
+    monthly_solar
+)
+
+
+temperature_count = len(
+    monthly_temperature
+)
+
+
+count_col1, count_col2 = (
+    st.columns(2)
+)
+
+
+with count_col1:
+
+    st.metric(
+        "Monthly Solar Values",
+        solar_count
+    )
+
+
+with count_col2:
+
+    st.metric(
+        "Monthly Temperature Values",
+        temperature_count
+    )
+
+
+# ==========================================================
+# SHOW DATA
+# ==========================================================
+
+if solar_count > 0:
+
+    st.success(
+        "☀️ Monthly solar data detected."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ No monthly solar data detected."
+    )
+
+
+if temperature_count > 0:
+
+    st.success(
+        "🌡️ Monthly temperature data detected."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ No monthly temperature data detected."
+    )
+
+
+# ==========================================================
+# STEP 4 — SOLAR GRAPH
+# ==========================================================
+
+st.header(
+    "4️⃣ ☀️ Monthly Solar Resource Graph"
+)
+
+
+solar_chart = None
+
+
+try:
+
+    solar_chart = (
+        create_solar_resource_chart(
+            monthly_solar
         )
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar resource graph failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+
+if solar_chart is not None:
+
+    st.plotly_chart(
+        solar_chart,
+        use_container_width=True
+    )
+
+    st.success(
+        "✅ Solar resource graph generated."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ Solar resource graph is unavailable."
+    )
+
+
+# ==========================================================
+# STEP 5 — TEMPERATURE GRAPH
+# ==========================================================
+
+st.header(
+    "5️⃣ 🌡️ Monthly Temperature Graph"
+)
+
+
+temperature_chart = None
+
+
+try:
+
+    temperature_chart = (
+        create_temperature_chart(
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Temperature graph failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+
+if temperature_chart is not None:
+
+    st.plotly_chart(
+        temperature_chart,
+        use_container_width=True
+    )
+
+    st.success(
+        "✅ Temperature graph generated."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ Temperature graph is unavailable."
+    )
+
+
+# ==========================================================
+# STEP 6 — BAR GRAPH
+# ==========================================================
+
+st.header(
+    "6️⃣ 📊 Solar Resource Bar Graph"
+)
+
+
+solar_bar_chart = None
+
+
+try:
+
+    solar_bar_chart = (
+        create_solar_bar_chart(
+            monthly_solar
+        )
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Solar bar graph failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+
+if solar_bar_chart is not None:
+
+    st.plotly_chart(
+        solar_bar_chart,
+        use_container_width=True
+    )
+
+    st.success(
+        "✅ Solar bar graph generated."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ Solar bar graph is unavailable."
+    )
+
+
+# ==========================================================
+# STEP 7 — COMBINED DATA TABLE
+# ==========================================================
+
+st.header(
+    "7️⃣ 📋 Solar & Temperature Data"
+)
+
+
+combined_data = None
+
+
+try:
+
+    combined_data = (
+        create_combined_dataframe(
+            monthly_solar,
+            monthly_temperature
+        )
+    )
+
+except Exception as error:
+
+    st.error(
+        f"""
+        ❌ Combined data table failed.
+
+        Error:
+
+        {error}
+        """
+    )
+
+
+if (
+    combined_data is not None
+    and
+    not combined_data.empty
+):
+
+    st.dataframe(
+        combined_data,
+        use_container_width=True
+    )
+
+    st.success(
+        "✅ Combined data table generated."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ Combined data table is unavailable."
+    )
+
+
+# ==========================================================
+# FINAL TEST
+# ==========================================================
+
+st.divider()
+
+st.header(
+    "🎯 Final Integration Test"
+)
+
+
+if (
+    solar_count > 0
+    and
+    (
+        solar_chart is not None
+    )
+    and
+    (
+        temperature_chart is not None
+    )
+):
+
+    st.success(
+        """
+        🎉 COMPLETE SOLAR ANALYTICS TEST PASSED!
+
+        The system successfully completed:
+
+        📍 Coordinates
+             ↓
+        📡 Solar Resource
+             ↓
+        🧮 Solar Analytics
+             ↓
+        📊 Interactive Graphs
+
+        The next step is to integrate these graphs
+        into the main Solar PV Designer Pro application.
+        """
+    )
+
+else:
+
+    st.warning(
+        """
+        ⚠️ The solar-resource connection is working,
+        but one or more analytics/visualization
+        components still require adjustment.
+        """
+    )
 
 
 # ==========================================================
@@ -297,10 +658,13 @@ st.divider()
 st.caption(
     """
     Solar PV Designer Pro Africa™
-    Solar Resource API Test v2.3.0
+    NASA POWER Analytics Test v2.3.0
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
+
+    For preliminary engineering, education,
+    research and demonstration purposes.
     """
 )
 
