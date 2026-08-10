@@ -3,12 +3,12 @@
 # ==========================================================
 #
 # Main Streamlit Application
-# Version: 2.2.3
+# Version: 2.3.0
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
 #
-# v2.2.3:
+# v2.3.0
 # - Persistent Streamlit session state
 # - Interactive world map
 # - NASA POWER integration
@@ -17,8 +17,14 @@
 # - PV sizing
 # - Battery sizing
 # - Inverter sizing
+# - Cost estimation
+# - Carbon analysis
 # - AI Solar Advisor
 # - PDF report generation
+# - Solar-resource analytics
+# - Monthly solar graphs
+# - Temperature graphs
+# - Seasonal solar analysis
 #
 # ==========================================================
 
@@ -28,8 +34,10 @@
 # ==========================================================
 
 import streamlit as st
+import pandas as pd
 
 
+# Engineering calculations
 from calculations import (
     calculate_pv_size,
     calculate_panels,
@@ -39,42 +47,55 @@ from calculations import (
 )
 
 
+# Solar database
 from data_loader import (
     load_solar_database,
     get_location_data
 )
 
 
+# AI Solar Advisor
 from ai import (
     generate_ai_recommendations
 )
 
 
+# PDF Report Generator
 from reports import (
     create_pdf_report
 )
 
 
+# Utility functions
 from utils import (
     format_currency
 )
 
 
+# Global location engine
 from location_engine import (
     get_location_solar_resource,
     get_location_summary
 )
 
 
+# Worldwide location search
 from location_search import (
     search_location,
     format_search_result
 )
 
 
+# Interactive map
 from map_location import (
     display_location_map,
     format_coordinates
+)
+
+
+# Solar analytics
+from solar_analytics import (
+    analyze_solar_resource
 )
 
 
@@ -117,7 +138,11 @@ DEFAULT_STATE = {
 
     "location_search_results": [],
 
-    "selected_map_location": None
+    "selected_map_location": None,
+
+    "analytics": None,
+
+    "recommendations": [],
 
 }
 
@@ -146,8 +171,8 @@ st.write(
     Solar PV Designer Pro Africa™ is a renewable energy
     engineering platform designed to support preliminary
     photovoltaic system sizing, battery analysis, cost
-    estimation, environmental assessment and AI-assisted
-    recommendations.
+    estimation, environmental assessment, solar-resource
+    analytics and AI-assisted recommendations.
     """
 )
 
@@ -200,7 +225,7 @@ location_source = st.sidebar.radio(
 
 
 # ==========================================================
-# SECTION 8 - SOLAR DATABASE
+# SECTION 8 - SOLAR DATABASE LOCATION
 # ==========================================================
 
 if location_source == "Solar Database":
@@ -210,12 +235,10 @@ if location_source == "Solar Database":
         solar_database["Location"].tolist()
     )
 
-
     location_data = get_location_data(
         solar_database,
         location
     )
-
 
     if location_data is not None:
 
@@ -233,46 +256,45 @@ if location_source == "Solar Database":
                 ]
             )
 
-
             st.session_state[
                 "location_description"
             ] = location
-
 
             st.session_state[
                 "latitude"
             ] = None
 
-
             st.session_state[
                 "longitude"
             ] = None
-
 
             st.session_state[
                 "sun_hours"
             ] = sun_hours
 
-
             st.session_state[
                 "temperature"
             ] = temperature
-
 
             st.session_state[
                 "solar_data"
             ] = location_data
 
+            st.session_state[
+                "solar_summary"
+            ] = None
+
+            st.session_state[
+                "location_summary"
+            ] = None
 
             st.session_state[
                 "location_ready"
             ] = True
 
-
             st.session_state[
                 "location_source"
             ] = "Solar Database"
-
 
         except (
             TypeError,
@@ -284,19 +306,16 @@ if location_source == "Solar Database":
                 "location_ready"
             ] = False
 
-
             st.sidebar.error(
                 "The selected location contains "
                 "invalid solar-resource data."
             )
-
 
     else:
 
         st.session_state[
             "location_ready"
         ] = False
-
 
         st.sidebar.error(
             "Selected location could not be found."
@@ -328,19 +347,16 @@ elif location_source == "Search for a Place":
         """
     )
 
-
     search_query = st.sidebar.text_input(
         "🔎 Search for a location",
         value="",
-        placeholder="Example: Kano, Nigeria"
+        placeholder="Example: Kampala, Uganda"
     )
-
 
     search_button = st.sidebar.button(
         "🔎 Search",
         use_container_width=True
     )
-
 
     if search_button:
 
@@ -372,7 +388,6 @@ elif location_source == "Search for a Place":
                         st.error(
                             f"Location search failed: {error}"
                         )
-
 
             st.session_state[
                 "location_search_results"
@@ -455,7 +470,6 @@ elif location_source == "Search for a Place":
                 )
             )
 
-
             country = (
                 selected_location.get(
                     "country",
@@ -463,10 +477,6 @@ elif location_source == "Search for a Place":
                 )
             )
 
-
-            # --------------------------------------------------
-            # Search NASA POWER button
-            # --------------------------------------------------
 
             retrieve_search_data = st.sidebar.button(
                 "☀️ Get Solar Data",
@@ -581,11 +591,9 @@ elif location_source == "Search for a Place":
                             "latitude"
                         ] = latitude
 
-
                         st.session_state[
                             "longitude"
                         ] = longitude
-
 
                         st.session_state[
                             "location_description"
@@ -600,16 +608,13 @@ elif location_source == "Search for a Place":
                             )
                         )
 
-
                         st.session_state[
                             "sun_hours"
                         ] = retrieved_sun_hours
 
-
                         st.session_state[
                             "temperature"
                         ] = retrieved_temperature
-
 
                         st.session_state[
                             "solar_data"
@@ -617,28 +622,23 @@ elif location_source == "Search for a Place":
                             "solar"
                         )
 
-
                         st.session_state[
                             "solar_summary"
                         ] = location_result.get(
                             "summary"
                         )
 
-
                         st.session_state[
                             "location_summary"
                         ] = summary
-
 
                         st.session_state[
                             "location_ready"
                         ] = True
 
-
                         st.session_state[
                             "location_source"
                         ] = "NASA POWER"
-
 
                         st.sidebar.success(
                             "✅ NASA POWER data retrieved."
@@ -650,7 +650,6 @@ elif location_source == "Search for a Place":
                             "NASA POWER returned no usable "
                             "solar-resource value."
                         )
-
 
                 else:
 
@@ -668,7 +667,6 @@ elif location_source == "Select on Map":
     st.header(
         "🗺️ Select Project Location on Map"
     )
-
 
     st.write(
         """
@@ -691,17 +689,12 @@ elif location_source == "Select on Map":
             ]
         )
 
-
         map_longitude = (
             selected_map_location[
                 "longitude"
             ]
         )
 
-
-        # --------------------------------------------------
-        # Save coordinates immediately
-        # --------------------------------------------------
 
         st.session_state[
             "selected_map_location"
@@ -733,10 +726,6 @@ elif location_source == "Select on Map":
             """
         )
 
-
-        # --------------------------------------------------
-        # NASA POWER button
-        # --------------------------------------------------
 
         retrieve_map_data = st.button(
             "☀️ Retrieve Solar Data for Map Location",
@@ -776,10 +765,6 @@ elif location_source == "Select on Map":
 
                     }
 
-
-            # --------------------------------------------------
-            # NASA POWER successful
-            # --------------------------------------------------
 
             if (
                 location_result
@@ -844,11 +829,6 @@ elif location_source == "Select on Map":
                     retrieved_temperature = 25.0
 
 
-                # --------------------------------------------------
-                # IMPORTANT:
-                # Persist everything in session_state
-                # --------------------------------------------------
-
                 if (
                     retrieved_sun_hours is not None
                     and retrieved_sun_hours > 0
@@ -858,11 +838,9 @@ elif location_source == "Select on Map":
                         "latitude"
                     ] = map_latitude
 
-
                     st.session_state[
                         "longitude"
                     ] = map_longitude
-
 
                     st.session_state[
                         "location_description"
@@ -874,16 +852,13 @@ elif location_source == "Select on Map":
                         "Map Selected Location"
                     )
 
-
                     st.session_state[
                         "sun_hours"
                     ] = retrieved_sun_hours
 
-
                     st.session_state[
                         "temperature"
                     ] = retrieved_temperature
-
 
                     st.session_state[
                         "solar_data"
@@ -891,45 +866,28 @@ elif location_source == "Select on Map":
                         "solar"
                     )
 
-
                     st.session_state[
                         "solar_summary"
                     ] = location_result.get(
                         "summary"
                     )
 
-
                     st.session_state[
                         "location_summary"
                     ] = summary
-
 
                     st.session_state[
                         "location_ready"
                     ] = True
 
-
                     st.session_state[
                         "location_source"
                     ] = "NASA POWER"
-
 
                     st.success(
                         "✅ NASA POWER data successfully "
                         "retrieved for the selected location."
                     )
-
-
-                    st.write(
-                        f"""
-                        **Peak Sun Hours:**
-                        {retrieved_sun_hours:.2f} h/day
-
-                        **Average Temperature:**
-                        {retrieved_temperature:.1f} °C
-                        """
-                    )
-
 
                 else:
 
@@ -941,13 +899,11 @@ elif location_source == "Select on Map":
                         """
                     )
 
-
             else:
 
                 st.error(
                     "NASA POWER request failed."
                 )
-
 
                 if location_result:
 
@@ -1122,11 +1078,9 @@ else:
                     "latitude"
                 ] = manual_latitude
 
-
                 st.session_state[
                     "longitude"
                 ] = manual_longitude
-
 
                 st.session_state[
                     "location_description"
@@ -1139,16 +1093,13 @@ else:
                     f"{manual_country}"
                 )
 
-
                 st.session_state[
                     "sun_hours"
                 ] = retrieved_sun_hours
 
-
                 st.session_state[
                     "temperature"
                 ] = retrieved_temperature
-
 
                 st.session_state[
                     "solar_data"
@@ -1156,33 +1107,27 @@ else:
                     "solar"
                 )
 
-
                 st.session_state[
                     "solar_summary"
                 ] = location_result.get(
                     "summary"
                 )
 
-
                 st.session_state[
                     "location_summary"
                 ] = summary
-
 
                 st.session_state[
                     "location_ready"
                 ] = True
 
-
                 st.session_state[
                     "location_source"
                 ] = "NASA POWER"
 
-
                 st.sidebar.success(
                     "✅ Solar data retrieved."
                 )
-
 
             else:
 
@@ -1190,7 +1135,6 @@ else:
                     "No usable solar-resource value "
                     "was returned."
                 )
-
 
         else:
 
@@ -1207,41 +1151,33 @@ location_ready = st.session_state[
     "location_ready"
 ]
 
-
 location_description = st.session_state[
     "location_description"
 ]
-
 
 latitude = st.session_state[
     "latitude"
 ]
 
-
 longitude = st.session_state[
     "longitude"
 ]
-
 
 sun_hours = st.session_state[
     "sun_hours"
 ]
 
-
 temperature = st.session_state[
     "temperature"
 ]
-
 
 solar_data = st.session_state[
     "solar_data"
 ]
 
-
 solar_summary = st.session_state[
     "solar_summary"
 ]
-
 
 location_summary = st.session_state[
     "location_summary"
@@ -1336,7 +1272,7 @@ if location_ready:
     else:
 
         latitude_display = (
-            f"{latitude:.4f}°"
+            f"{float(latitude):.4f}°"
         )
 
 
@@ -1347,7 +1283,7 @@ if location_ready:
     else:
 
         longitude_display = (
-            f"{longitude:.4f}°"
+            f"{float(longitude):.4f}°"
         )
 
 
@@ -1409,7 +1345,6 @@ if location_ready:
             "NASA POWER"
         )
     )
-
 
 else:
 
@@ -1475,7 +1410,419 @@ if (
 
 
 # ==========================================================
-# SECTION 16 - DESIGN BUTTON
+# SECTION 16 - SOLAR ANALYTICS
+# ==========================================================
+
+if (
+    location_ready
+    and solar_data is not None
+    and st.session_state[
+        "location_source"
+    ] != "Solar Database"
+):
+
+    st.divider()
+
+    st.header(
+        "📈 Solar Resource Analytics"
+    )
+
+    try:
+
+        analytics = analyze_solar_resource(
+            solar_data
+        )
+
+        st.session_state[
+            "analytics"
+        ] = analytics
+
+    except Exception as error:
+
+        analytics = None
+
+        st.warning(
+            "Solar analytics could not be generated: "
+            f"{error}"
+        )
+
+
+    if analytics:
+
+        monthly_solar = analytics.get(
+            "monthly_solar",
+            []
+        )
+
+        monthly_temperature = analytics.get(
+            "monthly_temperature",
+            []
+        )
+
+        solar_statistics = analytics.get(
+            "solar_statistics",
+            {}
+        )
+
+        temperature_statistics = analytics.get(
+            "temperature_statistics",
+            {}
+        )
+
+        seasonal_analysis = analytics.get(
+            "seasonal_analysis",
+            {}
+        )
+
+
+        # --------------------------------------------------
+        # Solar statistics
+        # --------------------------------------------------
+
+        st.subheader(
+            "☀️ Solar Resource Statistics"
+        )
+
+
+        solar_stat_col1, solar_stat_col2, solar_stat_col3, solar_stat_col4 = (
+            st.columns(4)
+        )
+
+
+        annual_average = solar_statistics.get(
+            "annual_average"
+        )
+
+        maximum = solar_statistics.get(
+            "maximum"
+        )
+
+        minimum = solar_statistics.get(
+            "minimum"
+        )
+
+        best_month = solar_statistics.get(
+            "best_month"
+        )
+
+
+        solar_stat_col1.metric(
+            "Annual Average",
+            (
+                f"{float(annual_average):.2f}"
+                if annual_average is not None
+                else "N/A"
+            )
+        )
+
+
+        solar_stat_col2.metric(
+            "Maximum",
+            (
+                f"{float(maximum):.2f}"
+                if maximum is not None
+                else "N/A"
+            )
+        )
+
+
+        solar_stat_col3.metric(
+            "Minimum",
+            (
+                f"{float(minimum):.2f}"
+                if minimum is not None
+                else "N/A"
+            )
+        )
+
+
+        solar_stat_col4.metric(
+            "Best Month",
+            best_month
+            if best_month
+            else "N/A"
+        )
+
+
+        # --------------------------------------------------
+        # Temperature statistics
+        # --------------------------------------------------
+
+        st.subheader(
+            "🌡️ Temperature Statistics"
+        )
+
+
+        temp_stat_col1, temp_stat_col2, temp_stat_col3, temp_stat_col4 = (
+            st.columns(4)
+        )
+
+
+        temperature_average = (
+            temperature_statistics.get(
+                "annual_average"
+            )
+        )
+
+        temperature_maximum = (
+            temperature_statistics.get(
+                "maximum"
+            )
+        )
+
+        temperature_minimum = (
+            temperature_statistics.get(
+                "minimum"
+            )
+        )
+
+        hottest_month = (
+            temperature_statistics.get(
+                "hottest_month"
+            )
+        )
+
+
+        temp_stat_col1.metric(
+            "Annual Average",
+            (
+                f"{float(temperature_average):.1f} °C"
+                if temperature_average is not None
+                else "N/A"
+            )
+        )
+
+
+        temp_stat_col2.metric(
+            "Maximum",
+            (
+                f"{float(temperature_maximum):.1f} °C"
+                if temperature_maximum is not None
+                else "N/A"
+            )
+        )
+
+
+        temp_stat_col3.metric(
+            "Minimum",
+            (
+                f"{float(temperature_minimum):.1f} °C"
+                if temperature_minimum is not None
+                else "N/A"
+            )
+        )
+
+
+        temp_stat_col4.metric(
+            "Hottest Month",
+            hottest_month
+            if hottest_month
+            else "N/A"
+        )
+
+
+        # --------------------------------------------------
+        # Monthly solar chart
+        # --------------------------------------------------
+
+        if monthly_solar:
+
+            st.subheader(
+                "☀️ Monthly Solar Resource"
+            )
+
+
+            solar_chart_data = pd.DataFrame(
+                monthly_solar
+            )
+
+
+            if (
+                "month_short" in solar_chart_data.columns
+                and "solar_value" in solar_chart_data.columns
+            ):
+
+                solar_chart_data = (
+                    solar_chart_data[
+                        [
+                            "month_short",
+                            "solar_value"
+                        ]
+                    ]
+                    .set_index(
+                        "month_short"
+                    )
+                )
+
+
+                st.line_chart(
+                    solar_chart_data,
+                    use_container_width=True
+                )
+
+
+                with st.expander(
+                    "📋 View Monthly Solar Data"
+                ):
+
+                    st.dataframe(
+                        pd.DataFrame(
+                            monthly_solar
+                        ),
+                        use_container_width=True
+                    )
+
+
+        # --------------------------------------------------
+        # Temperature chart
+        # --------------------------------------------------
+
+        if monthly_temperature:
+
+            st.subheader(
+                "🌡️ Monthly Average Temperature"
+            )
+
+
+            temperature_chart_data = pd.DataFrame(
+                monthly_temperature
+            )
+
+
+            if (
+                "month_short"
+                in temperature_chart_data.columns
+                and
+                "temperature"
+                in temperature_chart_data.columns
+            ):
+
+                temperature_chart_data = (
+                    temperature_chart_data[
+                        [
+                            "month_short",
+                            "temperature"
+                        ]
+                    ]
+                    .set_index(
+                        "month_short"
+                    )
+                )
+
+
+                st.line_chart(
+                    temperature_chart_data,
+                    use_container_width=True
+                )
+
+
+                with st.expander(
+                    "📋 View Monthly Temperature Data"
+                ):
+
+                    st.dataframe(
+                        pd.DataFrame(
+                            monthly_temperature
+                        ),
+                        use_container_width=True
+                    )
+
+
+        # --------------------------------------------------
+        # Seasonal analysis
+        # --------------------------------------------------
+
+        st.subheader(
+            "🌦️ Seasonal Solar Analysis"
+        )
+
+
+        seasonal_col1, seasonal_col2, seasonal_col3 = (
+            st.columns(3)
+        )
+
+
+        high_months = seasonal_analysis.get(
+            "high_solar_months",
+            []
+        )
+
+        medium_months = seasonal_analysis.get(
+            "medium_solar_months",
+            []
+        )
+
+        low_months = seasonal_analysis.get(
+            "low_solar_months",
+            []
+        )
+
+
+        with seasonal_col1:
+
+            st.markdown(
+                "### 🟢 High Solar"
+            )
+
+            if high_months:
+
+                st.write(
+                    ", ".join(
+                        high_months
+                    )
+                )
+
+            else:
+
+                st.write(
+                    "No months classified."
+                )
+
+
+        with seasonal_col2:
+
+            st.markdown(
+                "### 🟡 Medium Solar"
+            )
+
+            if medium_months:
+
+                st.write(
+                    ", ".join(
+                        medium_months
+                    )
+                )
+
+            else:
+
+                st.write(
+                    "No months classified."
+                )
+
+
+        with seasonal_col3:
+
+            st.markdown(
+                "### 🔵 Low Solar"
+            )
+
+            if low_months:
+
+                st.write(
+                    ", ".join(
+                        low_months
+                    )
+                )
+
+            else:
+
+                st.write(
+                    "No months classified."
+                )
+
+
+# ==========================================================
+# SECTION 17 - DESIGN BUTTON
 # ==========================================================
 
 design_button = st.button(
@@ -1486,7 +1833,7 @@ design_button = st.button(
 
 
 # ==========================================================
-# SECTION 17 - ENGINEERING CALCULATIONS
+# SECTION 18 - ENGINEERING CALCULATIONS
 # ==========================================================
 
 if design_button and location_ready:
@@ -1604,7 +1951,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 18 - ENGINEERING RESULTS
+    # SECTION 19 - ENGINEERING RESULTS
     # ======================================================
 
     st.header(
@@ -1639,7 +1986,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 19 - EQUIPMENT RECOMMENDATION
+    # SECTION 20 - EQUIPMENT RECOMMENDATION
     # ======================================================
 
     st.subheader(
@@ -1695,7 +2042,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 20 - AI SOLAR ADVISOR
+    # SECTION 21 - AI SOLAR ADVISOR
     # ======================================================
 
     st.divider()
@@ -1739,6 +2086,11 @@ if design_button and location_ready:
         ]
 
 
+    st.session_state[
+        "recommendations"
+    ] = recommendations
+
+
     for recommendation in recommendations:
 
         st.success(
@@ -1747,7 +2099,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 21 - PDF REPORT DATA
+    # SECTION 22 - PDF REPORT DATA
     # ======================================================
 
     report_data = {
@@ -1838,7 +2190,25 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 22 - PDF REPORT
+    # SECTION 23 - ADD ANALYTICS TO REPORT
+    # ======================================================
+
+    analytics_for_report = (
+        st.session_state.get(
+            "analytics"
+        )
+    )
+
+
+    if analytics_for_report:
+
+        report_data[
+            "solar_analytics"
+        ] = analytics_for_report
+
+
+    # ======================================================
+    # SECTION 24 - PDF REPORT
     # ======================================================
 
     st.divider()
@@ -1885,18 +2255,17 @@ if design_button and location_ready:
 
 
 # ==========================================================
-# SECTION 23 - FOOTER
+# SECTION 25 - FOOTER
 # ==========================================================
 
 st.divider()
 
-
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.2.3
+    Solar PV Designer Pro Africa™ v2.3.0
 
     Worldwide Location Search + Interactive Map
-    + NASA POWER
+    + NASA POWER + Solar Analytics
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
