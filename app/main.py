@@ -1,9 +1,10 @@
+```python
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
 # Main Streamlit Application
-# Version: 2.0
+# Version: 2.3
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
@@ -22,7 +23,10 @@
 import streamlit as st
 
 
-# Engineering calculations
+# ==========================================================
+# ENGINEERING CALCULATIONS
+# ==========================================================
+
 from calculations import (
     calculate_pv_size,
     calculate_panels,
@@ -33,28 +37,71 @@ from calculations import (
 )
 
 
-# Solar database
+# ==========================================================
+# SOLAR DATABASE
+# ==========================================================
+
 from data_loader import (
     load_solar_database,
-    get_location_data
+    get_location_data,
+    get_location_coordinates
 )
 
 
-# AI Solar Advisor
+# ==========================================================
+# AI SOLAR ADVISOR
+# ==========================================================
+
 from ai import (
     generate_ai_recommendations
 )
 
 
-# PDF Report Generator
+# ==========================================================
+# PDF REPORT GENERATOR
+# ==========================================================
+
 from reports import (
     create_pdf_report
 )
 
 
-# Utility functions
+# ==========================================================
+# UTILITY FUNCTIONS
+# ==========================================================
+
 from utils import (
     format_currency
+)
+
+
+# ==========================================================
+# NASA POWER SOLAR RESOURCE
+# ==========================================================
+
+from solar_api import (
+    get_solar_resource
+)
+
+
+# ==========================================================
+# SOLAR ANALYTICS
+# ==========================================================
+
+from solar_analytics import (
+    analyze_solar_resource
+)
+
+
+# ==========================================================
+# GRAPH VISUALIZATION
+# ==========================================================
+
+from graph_visualization import (
+    create_solar_resource_chart,
+    create_temperature_chart,
+    create_solar_bar_chart,
+    create_combined_dataframe
 )
 
 
@@ -86,8 +133,8 @@ st.write(
     Solar PV Designer Pro Africa™ is a renewable energy
     engineering platform designed to support preliminary
     photovoltaic system sizing, battery analysis, cost
-    estimation, environmental assessment and AI-assisted
-    recommendations.
+    estimation, environmental assessment, solar-resource
+    analytics and AI-assisted recommendations.
     """
 )
 
@@ -118,9 +165,9 @@ st.sidebar.header(
 )
 
 
-# ----------------------------------------------------------
-# Location
-# ----------------------------------------------------------
+# ==========================================================
+# LOCATION
+# ==========================================================
 
 location = st.sidebar.selectbox(
     "📍 Select Location",
@@ -128,7 +175,9 @@ location = st.sidebar.selectbox(
 )
 
 
-# Get selected location information
+# ==========================================================
+# GET SELECTED LOCATION INFORMATION
+# ==========================================================
 
 location_data = get_location_data(
     solar_data,
@@ -145,21 +194,99 @@ if location_data is None:
     st.stop()
 
 
-# Solar resource
+# ==========================================================
+# SOLAR RESOURCE FROM DATABASE
+# ==========================================================
 
-sun_hours = float(
-    location_data["Peak_Sun_Hours"]
+try:
+
+    sun_hours = float(
+        location_data["Peak_Sun_Hours"]
+    )
+
+except (
+    KeyError,
+    TypeError,
+    ValueError
+):
+
+    sun_hours = 5.0
+
+
+try:
+
+    temperature = float(
+        location_data["Average_Temperature"]
+    )
+
+except (
+    KeyError,
+    TypeError,
+    ValueError
+):
+
+    temperature = 25.0
+
+
+# ==========================================================
+# LOCATION COORDINATES
+# ==========================================================
+
+latitude, longitude = (
+    get_location_coordinates(
+        location_data
+    )
 )
 
 
-temperature = float(
-    location_data["Average_Temperature"]
-)
+# ==========================================================
+# NASA POWER RESOURCE VARIABLES
+# ==========================================================
+
+solar_resource = None
+
+solar_analytics = None
+
+nasa_error = None
 
 
-# ----------------------------------------------------------
-# Energy demand
-# ----------------------------------------------------------
+# ==========================================================
+# NASA POWER RETRIEVAL
+# ==========================================================
+
+if (
+    latitude is not None
+    and
+    longitude is not None
+):
+
+    try:
+
+        solar_resource = get_solar_resource(
+            latitude,
+            longitude
+        )
+
+        if solar_resource is not None:
+
+            solar_analytics = (
+                analyze_solar_resource(
+                    solar_resource
+                )
+            )
+
+    except Exception as error:
+
+        nasa_error = str(error)
+
+        solar_resource = None
+
+        solar_analytics = None
+
+
+# ==========================================================
+# ENERGY DEMAND
+# ==========================================================
 
 energy = st.sidebar.number_input(
     "Daily Energy Demand (kWh/day)",
@@ -169,9 +296,9 @@ energy = st.sidebar.number_input(
 )
 
 
-# ----------------------------------------------------------
-# System efficiency
-# ----------------------------------------------------------
+# ==========================================================
+# SYSTEM EFFICIENCY
+# ==========================================================
 
 efficiency_percent = st.sidebar.slider(
     "Overall System Efficiency (%)",
@@ -180,15 +307,14 @@ efficiency_percent = st.sidebar.slider(
     value=80
 )
 
-
 efficiency = (
     efficiency_percent / 100
 )
 
 
-# ----------------------------------------------------------
-# Battery
-# ----------------------------------------------------------
+# ==========================================================
+# BATTERY
+# ==========================================================
 
 battery_type = st.sidebar.selectbox(
     "Battery Technology",
@@ -199,9 +325,9 @@ battery_type = st.sidebar.selectbox(
 )
 
 
-# ----------------------------------------------------------
-# Autonomy
-# ----------------------------------------------------------
+# ==========================================================
+# AUTONOMY
+# ==========================================================
 
 days = st.sidebar.number_input(
     "Battery Backup / Autonomy (Days)",
@@ -211,9 +337,9 @@ days = st.sidebar.number_input(
 )
 
 
-# ----------------------------------------------------------
-# Solar panel
-# ----------------------------------------------------------
+# ==========================================================
+# SOLAR PANEL
+# ==========================================================
 
 panel_rating = st.sidebar.selectbox(
     "Solar Panel Rating (Watts)",
@@ -258,7 +384,279 @@ location_col3.metric(
 
 
 # ==========================================================
-# SECTION 7 - DESIGN BUTTON
+# COORDINATES
+# ==========================================================
+
+if (
+    latitude is not None
+    and
+    longitude is not None
+):
+
+    coordinate_col1, coordinate_col2 = (
+        st.columns(2)
+    )
+
+    coordinate_col1.metric(
+        "Latitude",
+        f"{latitude:.4f}°"
+    )
+
+    coordinate_col2.metric(
+        "Longitude",
+        f"{longitude:.4f}°"
+    )
+
+else:
+
+    st.info(
+        """
+        📍 Geographic coordinates are not available
+        for this database location.
+
+        The application will continue using the existing
+        solar-resource database.
+        """
+    )
+
+
+# ==========================================================
+# SECTION 7 - NASA POWER SOLAR ANALYTICS
+# ==========================================================
+
+st.divider()
+
+st.header(
+    "📡 NASA POWER Solar Analytics"
+)
+
+
+if solar_analytics is not None:
+
+    st.success(
+        "✅ NASA POWER solar-resource data retrieved successfully."
+    )
+
+
+    # ======================================================
+    # MONTHLY SOLAR DATA
+    # ======================================================
+
+    monthly_solar = solar_analytics.get(
+        "monthly_solar",
+        []
+    )
+
+
+    # ======================================================
+    # MONTHLY TEMPERATURE DATA
+    # ======================================================
+
+    monthly_temperature = solar_analytics.get(
+        "monthly_temperature",
+        []
+    )
+
+
+    # ======================================================
+    # ANALYTICS METRICS
+    # ======================================================
+
+    analytics_col1, analytics_col2 = (
+        st.columns(2)
+    )
+
+
+    analytics_col1.metric(
+        "Monthly Solar Values",
+        len(monthly_solar)
+    )
+
+
+    analytics_col2.metric(
+        "Monthly Temperature Values",
+        len(monthly_temperature)
+    )
+
+
+    # ======================================================
+    # SOLAR RESOURCE GRAPH
+    # ======================================================
+
+    if monthly_solar:
+
+        st.subheader(
+            "☀️ Monthly Solar Resource"
+        )
+
+        try:
+
+            solar_chart = (
+                create_solar_resource_chart(
+                    monthly_solar
+                )
+            )
+
+            if solar_chart is not None:
+
+                st.plotly_chart(
+                    solar_chart,
+                    use_container_width=True
+                )
+
+        except Exception as error:
+
+            st.warning(
+                f"Solar resource graph unavailable: {error}"
+            )
+
+
+    # ======================================================
+    # TEMPERATURE GRAPH
+    # ======================================================
+
+    if monthly_temperature:
+
+        st.subheader(
+            "🌡️ Monthly Temperature"
+        )
+
+        try:
+
+            temperature_chart = (
+                create_temperature_chart(
+                    monthly_temperature
+                )
+            )
+
+            if temperature_chart is not None:
+
+                st.plotly_chart(
+                    temperature_chart,
+                    use_container_width=True
+                )
+
+        except Exception as error:
+
+            st.warning(
+                f"Temperature graph unavailable: {error}"
+            )
+
+
+    # ======================================================
+    # SOLAR BAR CHART
+    # ======================================================
+
+    if monthly_solar:
+
+        st.subheader(
+            "📊 Monthly Solar Resource — Bar Chart"
+        )
+
+        try:
+
+            solar_bar_chart = (
+                create_solar_bar_chart(
+                    monthly_solar
+                )
+            )
+
+            if solar_bar_chart is not None:
+
+                st.plotly_chart(
+                    solar_bar_chart,
+                    use_container_width=True
+                )
+
+        except Exception as error:
+
+            st.warning(
+                f"Solar bar chart unavailable: {error}"
+            )
+
+
+    # ======================================================
+    # COMBINED DATA TABLE
+    # ======================================================
+
+    try:
+
+        combined_data = (
+            create_combined_dataframe(
+                monthly_solar,
+                monthly_temperature
+            )
+        )
+
+        if (
+            combined_data is not None
+            and
+            not combined_data.empty
+        ):
+
+            with st.expander(
+                "📋 View Monthly Solar & Temperature Data"
+            ):
+
+                st.dataframe(
+                    combined_data,
+                    use_container_width=True
+                )
+
+    except Exception as error:
+
+        st.warning(
+            f"Monthly data table unavailable: {error}"
+        )
+
+
+else:
+
+    if nasa_error:
+
+        st.warning(
+            f"""
+            ⚠️ NASA POWER data is temporarily unavailable.
+
+            The application will continue using the
+            existing solar-resource database.
+
+            Technical message:
+            {nasa_error}
+            """
+        )
+
+    elif (
+        latitude is None
+        or
+        longitude is None
+    ):
+
+        st.info(
+            """
+            📍 NASA POWER analytics require latitude and
+            longitude for this location.
+
+            The existing database values will continue
+            to be used for PV system sizing.
+            """
+        )
+
+    else:
+
+        st.info(
+            """
+            📡 NASA POWER analytics are not currently
+            available for this location.
+
+            The existing solar-resource database will
+            continue to be used.
+            """
+        )
+
+
+# ==========================================================
+# SECTION 8 - DESIGN BUTTON
 # ==========================================================
 
 design_button = st.button(
@@ -268,7 +666,7 @@ design_button = st.button(
 
 
 # ==========================================================
-# SECTION 8 - ENGINEERING CALCULATIONS
+# SECTION 9 - ENGINEERING CALCULATIONS
 # ==========================================================
 
 if design_button:
@@ -327,43 +725,48 @@ if design_button:
 
 
     # ------------------------------------------------------
-    # Cost components
+    # Cost calculation
     # ------------------------------------------------------
 
-    panel_cost = (
-        pv_size * 800
-    )
+    try:
 
+        total_cost = calculate_cost(
+            pv_size=pv_size,
+            battery_capacity=battery_capacity,
+            inverter_size=inverter_size
+        )
 
-    battery_cost = (
-        battery_capacity * 300
-    )
+    except Exception:
 
+        panel_cost = (
+            pv_size * 800
+        )
 
-    inverter_cost = (
-        inverter_size * 250
-    )
+        battery_cost = (
+            battery_capacity * 300
+        )
 
+        inverter_cost = (
+            inverter_size * 250
+        )
 
-    equipment_cost = (
-        panel_cost
-        +
-        battery_cost
-        +
-        inverter_cost
-    )
+        equipment_cost = (
+            panel_cost
+            +
+            battery_cost
+            +
+            inverter_cost
+        )
 
+        installation_cost = (
+            equipment_cost * 0.15
+        )
 
-    installation_cost = (
-        equipment_cost * 0.15
-    )
-
-
-    total_cost = (
-        equipment_cost
-        +
-        installation_cost
-    )
+        total_cost = (
+            equipment_cost
+            +
+            installation_cost
+        )
 
 
     # ------------------------------------------------------
@@ -376,7 +779,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 9 - DISPLAY ENGINEERING RESULTS
+    # SECTION 10 - DISPLAY ENGINEERING RESULTS
     # ======================================================
 
     st.header(
@@ -411,7 +814,7 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 10 - EQUIPMENT RECOMMENDATION
+    # SECTION 11 - EQUIPMENT RECOMMENDATION
     # ======================================================
 
     st.subheader(
@@ -467,11 +870,10 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 11 - AI SOLAR ADVISOR
+    # SECTION 12 - AI SOLAR ADVISOR
     # ======================================================
 
     st.divider()
-
 
     st.header(
         "🤖 AI Solar Advisor"
@@ -504,91 +906,124 @@ if design_button:
 
 
     # ======================================================
-    # SECTION 12 - PDF REPORT DATA
+    # SECTION 13 - PDF REPORT DATA
     # ======================================================
 
     report_data = {
 
-        "location": location,
+        "location":
+            location,
 
-        "energy": energy,
+        "energy":
+            energy,
 
-        "sun_hours": sun_hours,
+        "sun_hours":
+            sun_hours,
 
-        "temperature": temperature,
+        "temperature":
+            temperature,
 
-        "battery_type": battery_type,
+        "battery_type":
+            battery_type,
 
-        "days": days,
+        "days":
+            days,
 
-        "pv": pv_size,
+        "pv":
+            pv_size,
 
-        "panels": panels,
+        "panels":
+            panels,
 
-        "panel_rating": panel_rating,
+        "panel_rating":
+            panel_rating,
 
-        "battery": battery_capacity,
+        "battery":
+            battery_capacity,
 
-        "inverter": inverter_size,
+        "inverter":
+            inverter_size,
 
-        "controller": controller_current,
+        "controller":
+            controller_current,
 
-        "panel_cost": panel_cost,
+        "cost":
+            total_cost,
 
-        "battery_cost": battery_cost,
-
-        "inverter_cost": inverter_cost,
-
-        "installation_cost": installation_cost,
-
-        "cost": total_cost,
-
-        "carbon": carbon_reduction
+        "carbon":
+            carbon_reduction
     }
 
 
     # ======================================================
-    # SECTION 13 - PDF REPORT
+    # ADD NASA INFORMATION TO REPORT DATA
+    # ======================================================
+
+    if (
+        latitude is not None
+        and
+        longitude is not None
+    ):
+
+        report_data[
+            "latitude"
+        ] = latitude
+
+        report_data[
+            "longitude"
+        ] = longitude
+
+
+    # ======================================================
+    # SECTION 14 - PDF REPORT
     # ======================================================
 
     st.divider()
-
 
     st.header(
         "📄 Solar Design Report"
     )
 
 
-    pdf_report = create_pdf_report(
-        data=report_data,
-        recommendations=recommendations
-    )
+    try:
+
+        pdf_report = create_pdf_report(
+            data=report_data,
+            recommendations=recommendations
+        )
 
 
-    st.download_button(
+        st.download_button(
 
-        label="📥 Download Professional PDF Report",
+            label=
+                "📥 Download Professional PDF Report",
 
-        data=pdf_report,
+            data=
+                pdf_report,
 
-        file_name=(
-            "Solar_PV_Design_Report.pdf"
-        ),
+            file_name=
+                "Solar_PV_Design_Report.pdf",
 
-        mime="application/pdf"
-    )
+            mime=
+                "application/pdf"
+        )
+
+    except Exception as error:
+
+        st.error(
+            f"PDF report generation failed: {error}"
+        )
 
 
 # ==========================================================
-# SECTION 14 - FOOTER
+# SECTION 15 - FOOTER
 # ==========================================================
 
 st.divider()
 
-
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.0
+    Solar PV Designer Pro Africa™ v2.3
 
     AI-Ready Renewable Energy Design Platform
 
@@ -599,3 +1034,4 @@ st.caption(
     research and demonstration purposes.
     """
 )
+```
