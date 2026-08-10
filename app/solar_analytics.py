@@ -9,15 +9,20 @@
 # Engr. Prof. Ibrahim Sani Madugu
 #
 # Purpose:
-# Process the already-processed NASA POWER data returned
-# by solar_api.py for visualization and engineering analysis.
+# Process NASA POWER monthly solar and temperature data
+# for visualization and engineering analysis.
 #
-# IMPORTANT:
-# This module works with the structure returned by:
-#
-#     get_solar_resource(latitude, longitude)
-#
-# from solar_api.py
+# Improvements in v2.3.1:
+# - Correct NASA POWER monthly data extraction
+# - Monthly solar-resource analysis
+# - Monthly temperature analysis
+# - Seasonal classification
+# - Solar statistics
+# - Temperature statistics
+# - Proper graph units
+# - Solar Resource axis: kWh/m²/day
+# - Temperature axis: °C
+# - Safe handling of missing data
 #
 # ==========================================================
 
@@ -69,10 +74,10 @@ def safe_float(value):
     Returns None if conversion fails.
     """
 
-    if value is None:
-        return None
-
     try:
+
+        if value is None:
+            return None
 
         number = float(value)
 
@@ -80,7 +85,8 @@ def safe_float(value):
         if number != number:
             return None
 
-        # Reject NASA POWER missing-value indicators
+        # NASA POWER uses very large negative values
+        # to represent unavailable data.
         if number <= -900:
             return None
 
@@ -92,318 +98,77 @@ def safe_float(value):
 
 
 # ==========================================================
-# SECTION 3 - MONTH KEY NORMALIZATION
+# SECTION 3 - FIND NASA PARAMETER DATA
 # ==========================================================
 
-def get_month_name(key):
+def _get_parameter_data(
+    solar_data,
+    parameter_name
+):
     """
-    Convert a NASA POWER month key into a month name.
-
-    Supports:
-
-        JAN
-        FEB
-        ...
-        DEC
-
-    and:
-
-        01
-        02
-        ...
-        12
-
-    and integer month numbers.
+    Locate a NASA POWER parameter regardless of whether
+    the data is stored directly or inside the standard
+    NASA POWER properties/parameter structure.
     """
-
-    if isinstance(key, int):
-
-        if 1 <= key <= 12:
-
-            return MONTH_NAMES[key - 1]
-
-        return str(key)
-
-    key_string = str(key).strip().upper()
-
-    # Numeric month
-    if key_string.isdigit():
-
-        month_number = int(key_string)
-
-        if 1 <= month_number <= 12:
-
-            return MONTH_NAMES[
-                month_number - 1
-            ]
-
-    # NASA POWER month code
-    month_codes = {
-        "JAN": "January",
-        "FEB": "February",
-        "MAR": "March",
-        "APR": "April",
-        "MAY": "May",
-        "JUN": "June",
-        "JUL": "July",
-        "AUG": "August",
-        "SEP": "September",
-        "OCT": "October",
-        "NOV": "November",
-        "DEC": "December"
-    }
-
-    return month_codes.get(
-        key_string,
-        key_string
-    )
-
-
-# ==========================================================
-# SECTION 4 - EXTRACT MONTHLY SOLAR DATA
-# ==========================================================
-
-def extract_monthly_solar_data(solar_data):
-    """
-    Extract monthly solar-resource values.
-
-    This function is designed specifically for the data
-    returned by solar_api.py.
-
-    Expected structure:
-
-        {
-            "monthly_solar": {
-                "JAN": value,
-                "FEB": value,
-                ...
-            }
-        }
-
-    It also supports:
-
-        monthly_display
-
-    and the original NASA POWER structure as a fallback.
-
-    Returns:
-
-        [
-            {
-                "month": "January",
-                "month_short": "Jan",
-                "month_number": 1,
-                "solar_value": value
-            },
-            ...
-        ]
-    """
-
-    results = []
 
     if not isinstance(
         solar_data,
         dict
     ):
-        return results
+        return {}
 
 
-    # ======================================================
-    # FIRST: Use processed monthly_solar data
-    # ======================================================
+    # ------------------------------------------------------
+    # Direct structure
+    # ------------------------------------------------------
 
-    monthly_solar = solar_data.get(
-        "monthly_solar"
+    parameter_data = solar_data.get(
+        parameter_name
     )
 
-
     if isinstance(
-        monthly_solar,
+        parameter_data,
         dict
     ):
 
-        for index, month_code in enumerate(
-            [
-                "JAN",
-                "FEB",
-                "MAR",
-                "APR",
-                "MAY",
-                "JUN",
-                "JUL",
-                "AUG",
-                "SEP",
-                "OCT",
-                "NOV",
-                "DEC"
-            ],
-            start=1
-        ):
-
-            value = monthly_solar.get(
-                month_code
-            )
-
-            # Also try lowercase
-            if value is None:
-
-                value = monthly_solar.get(
-                    month_code.lower()
-                )
-
-            # Also try numeric key
-            if value is None:
-
-                value = monthly_solar.get(
-                    index
-                )
-
-            # Also try numeric string
-            if value is None:
-
-                value = monthly_solar.get(
-                    str(index)
-                )
-
-            value = safe_float(
-                value
-            )
-
-            if value is not None:
-
-                results.append({
-
-                    "month":
-                        MONTH_NAMES[index - 1],
-
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
-
-                    "month_number":
-                        index,
-
-                    "solar_value":
-                        value
-
-                })
+        return parameter_data
 
 
-        if results:
+    # ------------------------------------------------------
+    # NASA POWER standard structure
+    # ------------------------------------------------------
 
-            return results
-
-
-    # ======================================================
-    # SECOND: Use monthly_display
-    # ======================================================
-
-    monthly_display = solar_data.get(
-        "monthly_display"
+    properties = solar_data.get(
+        "properties",
+        {}
     )
 
 
-    if isinstance(
-        monthly_display,
-        list
+    if not isinstance(
+        properties,
+        dict
     ):
 
-        for index, item in enumerate(
-            monthly_display,
-            start=1
-        ):
-
-            if not isinstance(
-                item,
-                dict
-            ):
-                continue
+        return {}
 
 
-            value = item.get(
-                "solar_resource"
-            )
-
-
-            if value is None:
-
-                value = item.get(
-                    "solar_value"
-                )
-
-
-            value = safe_float(
-                value
-            )
-
-
-            if value is not None:
-
-                month_name = item.get(
-                    "month"
-                )
-
-
-                if not month_name:
-
-                    month_name = (
-                        MONTH_NAMES[index - 1]
-                    )
-
-
-                results.append({
-
-                    "month":
-                        month_name,
-
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
-
-                    "month_number":
-                        index,
-
-                    "solar_value":
-                        value
-
-                })
-
-
-        if results:
-
-            return results
-
-
-    # ======================================================
-    # THIRD: Original NASA POWER structure
-    # ======================================================
-
-    parameter_data = solar_data.get(
-        "ALLSKY_SFC_SW_DWN"
+    parameters = properties.get(
+        "parameter",
+        {}
     )
 
 
-    if parameter_data is None:
+    if not isinstance(
+        parameters,
+        dict
+    ):
 
-        properties = solar_data.get(
-            "properties",
-            {}
-        )
+        return {}
 
 
-        if isinstance(
-            properties,
-            dict
-        ):
-
-            parameter_data = (
-                properties
-                .get(
-                    "parameter",
-                    {}
-                )
-                .get(
-                    "ALLSKY_SFC_SW_DWN"
-                )
-            )
+    parameter_data = parameters.get(
+        parameter_name
+    )
 
 
     if isinstance(
@@ -411,68 +176,115 @@ def extract_monthly_solar_data(solar_data):
         dict
     ):
 
-        month_codes = [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC"
-        ]
+        return parameter_data
 
 
-        for index, month_code in enumerate(
-            month_codes,
-            start=1
-        ):
+    return {}
+
+
+# ==========================================================
+# SECTION 4 - EXTRACT MONTHLY SOLAR DATA
+# ==========================================================
+
+def extract_monthly_solar_data(
+    solar_data
+):
+    """
+    Extract monthly NASA POWER solar-resource values.
+
+    NASA POWER parameter:
+
+        ALLSKY_SFC_SW_DWN
+
+    Unit:
+
+        kWh/m²/day
+
+    Returns a list containing:
+
+        month
+        month_short
+        month_number
+        solar_value
+    """
+
+    results = []
+
+
+    parameter_data = _get_parameter_data(
+        solar_data,
+        "ALLSKY_SFC_SW_DWN"
+    )
+
+
+    if not parameter_data:
+
+        return results
+
+
+    # ------------------------------------------------------
+    # Process all 12 months
+    # ------------------------------------------------------
+
+    for month_number in range(
+        1,
+        13
+    ):
+
+        month_key = (
+            f"{month_number:02d}"
+        )
+
+
+        value = parameter_data.get(
+            month_key
+        )
+
+
+        # Try integer key
+        if value is None:
 
             value = parameter_data.get(
-                month_code
+                month_number
             )
 
 
-            if value is None:
+        # Try abbreviated NASA-style keys
+        if value is None:
 
-                value = parameter_data.get(
-                    f"{index:02d}"
-                )
-
-
-            if value is None:
-
-                value = parameter_data.get(
-                    index
-                )
-
-
-            value = safe_float(
-                value
+            value = parameter_data.get(
+                MONTH_ABBREVIATIONS[
+                    month_number - 1
+                ].upper()
             )
 
 
-            if value is not None:
+        value = safe_float(
+            value
+        )
 
-                results.append({
 
-                    "month":
-                        MONTH_NAMES[index - 1],
+        if value is not None:
 
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
+            results.append({
 
-                    "month_number":
-                        index,
+                "month":
+                    MONTH_NAMES[
+                        month_number - 1
+                    ],
 
-                    "solar_value":
-                        value
+                "month_short":
+                    MONTH_ABBREVIATIONS[
+                        month_number - 1
+                    ],
 
-                })
+                "month_number":
+                    month_number,
+
+                "solar_value":
+                    value
+
+            })
 
 
     return results
@@ -486,282 +298,103 @@ def extract_monthly_temperature_data(
     solar_data
 ):
     """
-    Extract monthly average temperature.
+    Extract monthly NASA POWER average temperature.
 
-    Works with the processed structure returned by
-    solar_api.py.
+    NASA POWER parameter:
+
+        T2M
+
+    Unit:
+
+        °C
+
+    Returns monthly records.
     """
 
     results = []
 
-    if not isinstance(
+
+    parameter_data = _get_parameter_data(
         solar_data,
-        dict
-    ):
-        return results
-
-
-    # ======================================================
-    # FIRST: Processed monthly_temperature
-    # ======================================================
-
-    monthly_temperature = solar_data.get(
-        "monthly_temperature"
-    )
-
-
-    if isinstance(
-        monthly_temperature,
-        dict
-    ):
-
-        month_codes = [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC"
-        ]
-
-
-        for index, month_code in enumerate(
-            month_codes,
-            start=1
-        ):
-
-            value = monthly_temperature.get(
-                month_code
-            )
-
-
-            if value is None:
-
-                value = monthly_temperature.get(
-                    month_code.lower()
-                )
-
-
-            if value is None:
-
-                value = monthly_temperature.get(
-                    index
-                )
-
-
-            if value is None:
-
-                value = monthly_temperature.get(
-                    str(index)
-                )
-
-
-            value = safe_float(
-                value
-            )
-
-
-            if value is not None:
-
-                results.append({
-
-                    "month":
-                        MONTH_NAMES[index - 1],
-
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
-
-                    "month_number":
-                        index,
-
-                    "temperature":
-                        value
-
-                })
-
-
-        if results:
-
-            return results
-
-
-    # ======================================================
-    # SECOND: monthly_display fallback
-    # ======================================================
-
-    monthly_display = solar_data.get(
-        "monthly_display"
-    )
-
-
-    if isinstance(
-        monthly_display,
-        list
-    ):
-
-        for index, item in enumerate(
-            monthly_display,
-            start=1
-        ):
-
-            if not isinstance(
-                item,
-                dict
-            ):
-                continue
-
-
-            value = item.get(
-                "temperature"
-            )
-
-
-            value = safe_float(
-                value
-            )
-
-
-            if value is not None:
-
-                results.append({
-
-                    "month":
-                        item.get(
-                            "month",
-                            MONTH_NAMES[index - 1]
-                        ),
-
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
-
-                    "month_number":
-                        index,
-
-                    "temperature":
-                        value
-
-                })
-
-
-        if results:
-
-            return results
-
-
-    # ======================================================
-    # THIRD: Original NASA POWER structure
-    # ======================================================
-
-    parameter_data = solar_data.get(
         "T2M"
     )
 
 
-    if parameter_data is None:
+    if not parameter_data:
 
-        properties = solar_data.get(
-            "properties",
-            {}
+        return results
+
+
+    # ------------------------------------------------------
+    # Process all 12 months
+    # ------------------------------------------------------
+
+    for month_number in range(
+        1,
+        13
+    ):
+
+        month_key = (
+            f"{month_number:02d}"
         )
 
 
-        if isinstance(
-            properties,
-            dict
-        ):
-
-            parameter_data = (
-                properties
-                .get(
-                    "parameter",
-                    {}
-                )
-                .get(
-                    "T2M"
-                )
-            )
+        value = parameter_data.get(
+            month_key
+        )
 
 
-    if isinstance(
-        parameter_data,
-        dict
-    ):
-
-        month_codes = [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC"
-        ]
-
-
-        for index, month_code in enumerate(
-            month_codes,
-            start=1
-        ):
+        # Try integer key
+        if value is None:
 
             value = parameter_data.get(
-                month_code
+                month_number
             )
 
 
-            if value is None:
+        # Try abbreviated keys
+        if value is None:
 
-                value = parameter_data.get(
-                    f"{index:02d}"
-                )
-
-
-            if value is None:
-
-                value = parameter_data.get(
-                    index
-                )
-
-
-            value = safe_float(
-                value
+            value = parameter_data.get(
+                MONTH_ABBREVIATIONS[
+                    month_number - 1
+                ].upper()
             )
 
 
-            if value is not None:
+        value = safe_float(
+            value
+        )
 
-                results.append({
 
-                    "month":
-                        MONTH_NAMES[index - 1],
+        if value is not None:
 
-                    "month_short":
-                        MONTH_ABBREVIATIONS[index - 1],
+            results.append({
 
-                    "month_number":
-                        index,
+                "month":
+                    MONTH_NAMES[
+                        month_number - 1
+                    ],
 
-                    "temperature":
-                        value
+                "month_short":
+                    MONTH_ABBREVIATIONS[
+                        month_number - 1
+                    ],
 
-                })
+                "month_number":
+                    month_number,
+
+                "temperature":
+                    value
+
+            })
 
 
     return results
 
 
 # ==========================================================
-# SECTION 6 - SOLAR STATISTICS
+# SECTION 6 - ANNUAL SOLAR STATISTICS
 # ==========================================================
 
 def calculate_solar_statistics(
@@ -771,24 +404,26 @@ def calculate_solar_statistics(
     Calculate annual solar-resource statistics.
     """
 
-    empty_result = {
-
-        "annual_average": None,
-
-        "maximum": None,
-
-        "minimum": None,
-
-        "best_month": None,
-
-        "lowest_month": None
-
-    }
-
-
     if not monthly_solar:
 
-        return empty_result
+        return {
+
+            "annual_average":
+                None,
+
+            "maximum":
+                None,
+
+            "minimum":
+                None,
+
+            "best_month":
+                None,
+
+            "lowest_month":
+                None
+
+        }
 
 
     values = []
@@ -815,17 +450,38 @@ def calculate_solar_statistics(
 
     if not values:
 
-        return empty_result
+        return {
+
+            "annual_average":
+                None,
+
+            "maximum":
+                None,
+
+            "minimum":
+                None,
+
+            "best_month":
+                None,
+
+            "lowest_month":
+                None
+
+        }
 
 
     average = (
+
         sum(
             value
             for item, value
             in values
         )
+
         /
+
         len(values)
+
     )
 
 
@@ -876,24 +532,26 @@ def calculate_temperature_statistics(
     Calculate annual temperature statistics.
     """
 
-    empty_result = {
-
-        "annual_average": None,
-
-        "maximum": None,
-
-        "minimum": None,
-
-        "hottest_month": None,
-
-        "coolest_month": None
-
-    }
-
-
     if not monthly_temperature:
 
-        return empty_result
+        return {
+
+            "annual_average":
+                None,
+
+            "maximum":
+                None,
+
+            "minimum":
+                None,
+
+            "hottest_month":
+                None,
+
+            "coolest_month":
+                None
+
+        }
 
 
     values = []
@@ -920,17 +578,38 @@ def calculate_temperature_statistics(
 
     if not values:
 
-        return empty_result
+        return {
+
+            "annual_average":
+                None,
+
+            "maximum":
+                None,
+
+            "minimum":
+                None,
+
+            "hottest_month":
+                None,
+
+            "coolest_month":
+                None
+
+        }
 
 
     average = (
+
         sum(
             value
             for item, value
             in values
         )
+
         /
+
         len(values)
+
     )
 
 
@@ -978,33 +657,37 @@ def calculate_seasonal_analysis(
     monthly_solar
 ):
     """
-    Classify months into:
+    Classify months into broad solar-resource categories.
 
-        High solar
-        Medium solar
-        Low solar
+    Classification is based on the actual monthly values:
 
-    Classification is based on the annual monthly
-    average rather than fixed geographic assumptions.
+        High:
+            >= 110% of annual average
+
+        Medium:
+            between 90% and 110%
+
+        Low:
+            <= 90% of annual average
     """
-
-    empty_result = {
-
-        "high_solar_months": [],
-
-        "medium_solar_months": [],
-
-        "low_solar_months": []
-
-    }
-
 
     if not monthly_solar:
 
-        return empty_result
+        return {
+
+            "high_solar_months":
+                [],
+
+            "medium_solar_months":
+                [],
+
+            "low_solar_months":
+                []
+
+        }
 
 
-    valid_items = []
+    values = []
 
 
     for item in monthly_solar:
@@ -1018,27 +701,33 @@ def calculate_seasonal_analysis(
 
         if value is not None:
 
-            valid_items.append(
-                (
-                    item,
-                    value
-                )
+            values.append(
+                value
             )
 
 
-    if not valid_items:
+    if not values:
 
-        return empty_result
+        return {
+
+            "high_solar_months":
+                [],
+
+            "medium_solar_months":
+                [],
+
+            "low_solar_months":
+                []
+
+        }
 
 
     average = (
-        sum(
-            value
-            for item, value
-            in valid_items
-        )
+
+        sum(values)
         /
-        len(valid_items)
+        len(values)
+
     )
 
 
@@ -1059,10 +748,23 @@ def calculate_seasonal_analysis(
     low = []
 
 
-    for item, value in valid_items:
+    for item in monthly_solar:
+
+        value = safe_float(
+            item.get(
+                "solar_value"
+            )
+        )
+
+
+        if value is None:
+
+            continue
+
 
         month = item.get(
-            "month"
+            "month",
+            "Unknown"
         )
 
 
@@ -1100,113 +802,7 @@ def calculate_seasonal_analysis(
 
 
 # ==========================================================
-# SECTION 9 - MONTHLY COMBINED DATA
-# ==========================================================
-
-def create_monthly_combined_data(
-    monthly_solar,
-    monthly_temperature
-):
-    """
-    Combine solar and temperature data into a single
-    monthly dataset suitable for Streamlit charts,
-    tables and reports.
-    """
-
-    combined = []
-
-
-    solar_lookup = {}
-
-    temperature_lookup = {}
-
-
-    # ------------------------------------------------------
-    # Solar lookup
-    # ------------------------------------------------------
-
-    for item in monthly_solar:
-
-        month_number = item.get(
-            "month_number"
-        )
-
-
-        if month_number is not None:
-
-            solar_lookup[
-                month_number
-            ] = safe_float(
-                item.get(
-                    "solar_value"
-                )
-            )
-
-
-    # ------------------------------------------------------
-    # Temperature lookup
-    # ------------------------------------------------------
-
-    for item in monthly_temperature:
-
-        month_number = item.get(
-            "month_number"
-        )
-
-
-        if month_number is not None:
-
-            temperature_lookup[
-                month_number
-            ] = safe_float(
-                item.get(
-                    "temperature"
-                )
-            )
-
-
-    # ------------------------------------------------------
-    # Build complete 12-month dataset
-    # ------------------------------------------------------
-
-    for month_number in range(
-        1,
-        13
-    ):
-
-        combined.append({
-
-            "month":
-                MONTH_NAMES[
-                    month_number - 1
-                ],
-
-            "month_short":
-                MONTH_ABBREVIATIONS[
-                    month_number - 1
-                ],
-
-            "month_number":
-                month_number,
-
-            "solar_resource":
-                solar_lookup.get(
-                    month_number
-                ),
-
-            "temperature":
-                temperature_lookup.get(
-                    month_number
-                )
-
-        })
-
-
-    return combined
-
-
-# ==========================================================
-# SECTION 10 - COMPLETE SOLAR ANALYTICS
+# SECTION 9 - COMPLETE ANALYTICS FUNCTION
 # ==========================================================
 
 def analyze_solar_resource(
@@ -1215,24 +811,13 @@ def analyze_solar_resource(
     """
     Perform complete solar-resource analysis.
 
-    This is the main function that should be called
-    by main.py.
+    Returns a single dictionary suitable for:
 
-    Returns a dictionary containing:
-
-        monthly_solar
-        monthly_temperature
-        monthly_combined
-        solar_statistics
-        temperature_statistics
-        seasonal_analysis
-        data_source
-        climatology_period
+        Streamlit
+        Charts
+        Engineering analysis
+        PDF reports
     """
-
-    # ------------------------------------------------------
-    # Extract monthly solar
-    # ------------------------------------------------------
 
     monthly_solar = (
         extract_monthly_solar_data(
@@ -1241,20 +826,12 @@ def analyze_solar_resource(
     )
 
 
-    # ------------------------------------------------------
-    # Extract temperature
-    # ------------------------------------------------------
-
     monthly_temperature = (
         extract_monthly_temperature_data(
             solar_data
         )
     )
 
-
-    # ------------------------------------------------------
-    # Statistics
-    # ------------------------------------------------------
 
     solar_statistics = (
         calculate_solar_statistics(
@@ -1270,53 +847,12 @@ def analyze_solar_resource(
     )
 
 
-    # ------------------------------------------------------
-    # Seasonal classification
-    # ------------------------------------------------------
-
     seasonal_analysis = (
         calculate_seasonal_analysis(
             monthly_solar
         )
     )
 
-
-    # ------------------------------------------------------
-    # Combined monthly data
-    # ------------------------------------------------------
-
-    monthly_combined = (
-        create_monthly_combined_data(
-            monthly_solar,
-            monthly_temperature
-        )
-    )
-
-
-    # ------------------------------------------------------
-    # Metadata
-    # ------------------------------------------------------
-
-    data_source = solar_data.get(
-        "data_source",
-        "NASA POWER"
-    ) if isinstance(
-        solar_data,
-        dict
-    ) else "NASA POWER"
-
-
-    climatology_period = solar_data.get(
-        "climatology_period"
-    ) if isinstance(
-        solar_data,
-        dict
-    ) else None
-
-
-    # ------------------------------------------------------
-    # Return complete analytics package
-    # ------------------------------------------------------
 
     return {
 
@@ -1325,9 +861,6 @@ def analyze_solar_resource(
 
         "monthly_temperature":
             monthly_temperature,
-
-        "monthly_combined":
-            monthly_combined,
 
         "solar_statistics":
             solar_statistics,
@@ -1338,31 +871,192 @@ def analyze_solar_resource(
         "seasonal_analysis":
             seasonal_analysis,
 
-        "data_source":
-            data_source,
+        # --------------------------------------------------
+        # Explicit engineering units
+        # --------------------------------------------------
 
-        "climatology_period":
-            climatology_period
+        "solar_resource_unit":
+            "kWh/m²/day",
+
+        "temperature_unit":
+            "°C"
 
     }
 
 
 # ==========================================================
-# SECTION 11 - SIMPLE SUMMARY FUNCTION
+# SECTION 10 - PREPARE MONTHLY CHART DATA
 # ==========================================================
 
-def get_analytics_summary(
-    solar_data
+def prepare_monthly_chart_data(
+    analytics
 ):
     """
-    Return a compact human-readable analytics summary.
+    Prepare a simple dictionary for Streamlit charts.
 
-    Useful for main.py and PDF reports.
+    This function does not create the charts itself.
+    It prepares clean data for main.py or another UI module.
     """
 
-    analytics = analyze_solar_resource(
-        solar_data
+    if not isinstance(
+        analytics,
+        dict
+    ):
+
+        return {
+
+            "solar":
+                [],
+
+            "temperature":
+                []
+
+        }
+
+
+    solar_records = (
+        analytics.get(
+            "monthly_solar",
+            []
+        )
     )
+
+
+    temperature_records = (
+        analytics.get(
+            "monthly_temperature",
+            []
+        )
+    )
+
+
+    solar_chart = []
+
+    for item in solar_records:
+
+        solar_chart.append({
+
+            "Month":
+                item.get(
+                    "month_short"
+                ),
+
+            "Solar Resource (kWh/m²/day)":
+                safe_float(
+                    item.get(
+                        "solar_value"
+                    )
+                )
+
+        })
+
+
+    temperature_chart = []
+
+    for item in temperature_records:
+
+        temperature_chart.append({
+
+            "Month":
+                item.get(
+                    "month_short"
+                ),
+
+            "Temperature (°C)":
+                safe_float(
+                    item.get(
+                        "temperature"
+                    )
+                )
+
+        })
+
+
+    return {
+
+        "solar":
+            solar_chart,
+
+        "temperature":
+            temperature_chart
+
+    }
+
+
+# ==========================================================
+# SECTION 11 - GET GRAPH LABELS
+# ==========================================================
+
+def get_graph_labels():
+    """
+    Return standard engineering labels for graphs.
+    """
+
+    return {
+
+        "solar_x":
+            "Month",
+
+        "solar_y":
+            "Solar Resource (kWh/m²/day)",
+
+        "temperature_x":
+            "Month",
+
+        "temperature_y":
+            "Temperature (°C)"
+
+    }
+
+
+# ==========================================================
+# SECTION 12 - ANALYTICS SUMMARY
+# ==========================================================
+
+def create_analytics_summary(
+    analytics
+):
+    """
+    Create a concise human-readable analytics summary.
+
+    Useful for Streamlit and PDF reporting.
+    """
+
+    if not isinstance(
+        analytics,
+        dict
+    ):
+
+        return {
+
+            "solar_average":
+                "N/A",
+
+            "solar_maximum":
+                "N/A",
+
+            "solar_minimum":
+                "N/A",
+
+            "best_month":
+                "N/A",
+
+            "temperature_average":
+                "N/A",
+
+            "temperature_maximum":
+                "N/A",
+
+            "temperature_minimum":
+                "N/A",
+
+            "hottest_month":
+                "N/A",
+
+            "coolest_month":
+                "N/A"
+
+        }
 
 
     solar_stats = analytics.get(
@@ -1377,153 +1071,459 @@ def get_analytics_summary(
     )
 
 
-    seasonal = analytics.get(
-        "seasonal_analysis",
-        {}
-    )
-
-
     return {
 
-        "average_solar":
-            solar_stats.get(
-                "annual_average"
+        "solar_average":
+
+            (
+                f"{solar_stats['annual_average']:.2f} "
+                "kWh/m²/day"
+                if solar_stats.get(
+                    "annual_average"
+                ) is not None
+                else "N/A"
             ),
 
-        "maximum_solar":
-            solar_stats.get(
-                "maximum"
+        "solar_maximum":
+
+            (
+                f"{solar_stats['maximum']:.2f} "
+                "kWh/m²/day"
+                if solar_stats.get(
+                    "maximum"
+                ) is not None
+                else "N/A"
             ),
 
-        "minimum_solar":
-            solar_stats.get(
-                "minimum"
+        "solar_minimum":
+
+            (
+                f"{solar_stats['minimum']:.2f} "
+                "kWh/m²/day"
+                if solar_stats.get(
+                    "minimum"
+                ) is not None
+                else "N/A"
             ),
 
         "best_month":
-            solar_stats.get(
-                "best_month"
+
+            (
+                solar_stats.get(
+                    "best_month"
+                )
+                or
+                "N/A"
             ),
 
-        "lowest_month":
-            solar_stats.get(
-                "lowest_month"
+        "temperature_average":
+
+            (
+                f"{temperature_stats['annual_average']:.1f} °C"
+                if temperature_stats.get(
+                    "annual_average"
+                ) is not None
+                else "N/A"
             ),
 
-        "average_temperature":
-            temperature_stats.get(
-                "annual_average"
+        "temperature_maximum":
+
+            (
+                f"{temperature_stats['maximum']:.1f} °C"
+                if temperature_stats.get(
+                    "maximum"
+                ) is not None
+                else "N/A"
             ),
 
-        "maximum_temperature":
-            temperature_stats.get(
-                "maximum"
-            ),
+        "temperature_minimum":
 
-        "minimum_temperature":
-            temperature_stats.get(
-                "minimum"
+            (
+                f"{temperature_stats['minimum']:.1f} °C"
+                if temperature_stats.get(
+                    "minimum"
+                ) is not None
+                else "N/A"
             ),
 
         "hottest_month":
-            temperature_stats.get(
-                "hottest_month"
+
+            (
+                temperature_stats.get(
+                    "hottest_month"
+                )
+                or
+                "N/A"
             ),
 
         "coolest_month":
-            temperature_stats.get(
-                "coolest_month"
-            ),
 
-        "high_solar_months":
-            seasonal.get(
-                "high_solar_months",
-                []
-            ),
-
-        "medium_solar_months":
-            seasonal.get(
-                "medium_solar_months",
-                []
-            ),
-
-        "low_solar_months":
-            seasonal.get(
-                "low_solar_months",
-                []
+            (
+                temperature_stats.get(
+                    "coolest_month"
+                )
+                or
+                "N/A"
             )
 
     }
 
 
 # ==========================================================
-# SECTION 12 - DATA AVAILABILITY CHECK
+# SECTION 13 - GRAPHING FUNCTIONS
 # ==========================================================
 
-def has_solar_analytics_data(
-    solar_data
+def plot_monthly_solar_resource(
+    analytics
 ):
     """
-    Check whether usable monthly solar data exists.
+    Create a Plotly monthly solar-resource graph.
+
+    Y-axis unit:
+        kWh/m²/day
+
+    Returns:
+        Plotly Figure or None
     """
 
-    monthly_solar = (
-        extract_monthly_solar_data(
-            solar_data
-        )
+    try:
+
+        import plotly.graph_objects as go
+
+    except ImportError:
+
+        return None
+
+
+    monthly_solar = analytics.get(
+        "monthly_solar",
+        []
     )
 
 
-    return len(
-        monthly_solar
-    ) > 0
+    if not monthly_solar:
+
+        return None
+
+
+    months = []
+
+    values = []
+
+
+    for item in monthly_solar:
+
+        value = safe_float(
+            item.get(
+                "solar_value"
+            )
+        )
+
+
+        if value is None:
+
+            continue
+
+
+        months.append(
+            item.get(
+                "month_short"
+            )
+        )
+
+
+        values.append(
+            value
+        )
+
+
+    if not values:
+
+        return None
+
+
+    figure = go.Figure()
+
+
+    figure.add_trace(
+
+        go.Bar(
+
+            x=months,
+
+            y=values,
+
+            name="Solar Resource",
+
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Solar Resource: "
+                "%{y:.2f} kWh/m²/day"
+                "<extra></extra>"
+            )
+
+        )
+
+    )
+
+
+    figure.update_layout(
+
+        title="Monthly Solar Resource",
+
+        xaxis_title="Month",
+
+        yaxis_title=(
+            "Solar Resource (kWh/m²/day)"
+        ),
+
+        hovermode="x unified",
+
+        margin=dict(
+            l=60,
+            r=30,
+            t=60,
+            b=50
+        )
+
+    )
+
+
+    return figure
 
 
 # ==========================================================
-# SECTION 13 - TEST FUNCTION
+# SECTION 14 - MONTHLY TEMPERATURE GRAPH
+# ==========================================================
+
+def plot_monthly_temperature(
+    analytics
+):
+    """
+    Create a Plotly monthly temperature graph.
+
+    Y-axis unit:
+        °C
+
+    Returns:
+        Plotly Figure or None
+    """
+
+    try:
+
+        import plotly.graph_objects as go
+
+    except ImportError:
+
+        return None
+
+
+    monthly_temperature = analytics.get(
+        "monthly_temperature",
+        []
+    )
+
+
+    if not monthly_temperature:
+
+        return None
+
+
+    months = []
+
+    values = []
+
+
+    for item in monthly_temperature:
+
+        value = safe_float(
+            item.get(
+                "temperature"
+            )
+        )
+
+
+        if value is None:
+
+            continue
+
+
+        months.append(
+            item.get(
+                "month_short"
+            )
+        )
+
+
+        values.append(
+            value
+        )
+
+
+    if not values:
+
+        return None
+
+
+    figure = go.Figure()
+
+
+    figure.add_trace(
+
+        go.Scatter(
+
+            x=months,
+
+            y=values,
+
+            mode="lines+markers",
+
+            name="Temperature",
+
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Temperature: "
+                "%{y:.1f} °C"
+                "<extra></extra>"
+            )
+
+        )
+
+    )
+
+
+    figure.update_layout(
+
+        title="Monthly Average Temperature",
+
+        xaxis_title="Month",
+
+        # IMPORTANT:
+        # The temperature unit is explicitly displayed.
+
+        yaxis_title="Temperature (°C)",
+
+        hovermode="x unified",
+
+        margin=dict(
+            l=60,
+            r=30,
+            t=60,
+            b=50
+        )
+
+    )
+
+
+    return figure
+
+
+# ==========================================================
+# SECTION 15 - COMBINED GRAPH DATA
+# ==========================================================
+
+def get_monthly_graph_data(
+    analytics
+):
+    """
+    Return monthly solar and temperature values
+    in a consistent structure.
+    """
+
+    solar = analytics.get(
+        "monthly_solar",
+        []
+    )
+
+
+    temperature = analytics.get(
+        "monthly_temperature",
+        []
+    )
+
+
+    solar_by_month = {
+
+        item.get(
+            "month_number"
+        ):
+            item.get(
+                "solar_value"
+            )
+
+        for item in solar
+
+    }
+
+
+    temperature_by_month = {
+
+        item.get(
+            "month_number"
+        ):
+            item.get(
+                "temperature"
+            )
+
+        for item in temperature
+
+    }
+
+
+    results = []
+
+
+    for month_number in range(
+        1,
+        13
+    ):
+
+        results.append({
+
+            "month":
+                MONTH_NAMES[
+                    month_number - 1
+                ],
+
+            "month_short":
+                MONTH_ABBREVIATIONS[
+                    month_number - 1
+                ],
+
+            "month_number":
+                month_number,
+
+            "solar_resource":
+                solar_by_month.get(
+                    month_number
+                ),
+
+            "temperature":
+                temperature_by_month.get(
+                    month_number
+                )
+
+        })
+
+
+    return results
+
+
+# ==========================================================
+# SECTION 16 - MODULE TEST
 # ==========================================================
 
 def test_solar_analytics(
     solar_data
 ):
     """
-    Test the analytics engine.
-
-    Returns a simple diagnostic dictionary.
+    Basic test function for the analytics module.
     """
 
     try:
 
         analytics = analyze_solar_resource(
             solar_data
-        )
-
-
-        monthly_solar_count = len(
-            analytics.get(
-                "monthly_solar",
-                []
-            )
-        )
-
-
-        monthly_temperature_count = len(
-            analytics.get(
-                "monthly_temperature",
-                []
-            )
-        )
-
-
-        solar_statistics = analytics.get(
-            "solar_statistics",
-            {}
-        )
-
-
-        seasonal = analytics.get(
-            "seasonal_analysis",
-            {}
         )
 
 
@@ -1535,44 +1535,8 @@ def test_solar_analytics(
             "message":
                 "Solar analytics processed successfully.",
 
-            "monthly_solar_count":
-                monthly_solar_count,
-
-            "monthly_temperature_count":
-                monthly_temperature_count,
-
-            "average_solar":
-                solar_statistics.get(
-                    "annual_average"
-                ),
-
-            "best_month":
-                solar_statistics.get(
-                    "best_month"
-                ),
-
-            "lowest_month":
-                solar_statistics.get(
-                    "lowest_month"
-                ),
-
-            "high_solar_months":
-                seasonal.get(
-                    "high_solar_months",
-                    []
-                ),
-
-            "medium_solar_months":
-                seasonal.get(
-                    "medium_solar_months",
-                    []
-                ),
-
-            "low_solar_months":
-                seasonal.get(
-                    "low_solar_months",
-                    []
-                )
+            "analytics":
+                analytics
 
         }
 
@@ -1587,15 +1551,7 @@ def test_solar_analytics(
             "message":
                 str(error),
 
-            "monthly_solar_count":
-                0,
-
-            "monthly_temperature_count":
-                0
+            "analytics":
+                None
 
         }
-
-
-# ==========================================================
-# END OF SOLAR ANALYTICS MODULE
-# ==========================================================
