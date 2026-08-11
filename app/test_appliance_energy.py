@@ -2,25 +2,20 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# Appliance Energy Test Module
+# Appliance Energy Test
 # Version: 2.4.0
-#
-# Developed by:
-# Engr. Prof. Ibrahim Sani Madugu
-#
-# Purpose:
-# Test appliance energy calculations before integration
-# into the main Solar PV Designer Pro dashboard.
 #
 # ==========================================================
 
 import streamlit as st
 
 from appliance_energy import (
+    create_appliance,
     calculate_appliance_energy,
     calculate_total_daily_energy,
     calculate_total_monthly_energy,
-    create_appliance
+    calculate_total_connected_load,
+    create_energy_summary
 )
 
 
@@ -40,30 +35,27 @@ st.set_page_config(
 # ==========================================================
 
 st.title(
-    "🔌 Appliance Energy Calculator — Test"
+    "🔌 Appliance Energy Calculator"
 )
 
 st.subheader(
-    "Solar PV Designer Pro Africa™ v2.4"
+    "Solar PV Designer Pro Africa™ — v2.4"
 )
 
 st.write(
     """
-    This test application demonstrates how household and
-    commercial appliances can be used to calculate daily
-    electricity demand.
+    This test demonstrates how appliance wattage,
+    quantity and daily operating hours are converted
+    into electricity demand.
     """
 )
 
 
 # ==========================================================
-# SECTION 1 - TEST APPLIANCES
+# TEST APPLIANCES
 # ==========================================================
 
-st.header("📋 Test Appliance Load")
-
-
-test_appliances = [
+appliances = [
 
     create_appliance(
         name="LED Lights",
@@ -104,19 +96,26 @@ test_appliances = [
 
 
 # ==========================================================
-# SECTION 2 - CALCULATE INDIVIDUAL APPLIANCES
+# CALCULATE APPLIANCE RESULTS
 # ==========================================================
 
-results = []
+rows = []
 
+for appliance in appliances:
 
-for appliance in test_appliances:
-
-    energy = calculate_appliance_energy(
-        appliance
+    daily_energy = (
+        calculate_appliance_energy(
+            appliance
+        )
     )
 
-    results.append({
+    load = (
+        appliance["wattage"]
+        *
+        appliance["quantity"]
+    )
+
+    rows.append({
 
         "Appliance":
             appliance["name"],
@@ -130,116 +129,138 @@ for appliance in test_appliances:
         "Hours/Day":
             appliance["hours_per_day"],
 
+        "Connected Load (W)":
+            load,
+
         "Daily Energy (kWh)":
-            energy
+            round(
+                daily_energy,
+                3
+            )
 
     })
 
 
 # ==========================================================
-# SECTION 3 - DISPLAY TABLE
+# DISPLAY TABLE
 # ==========================================================
+
+st.header(
+    "📋 Appliance Energy Schedule"
+)
 
 st.dataframe(
-    results,
-    use_container_width=True
+    rows,
+    use_container_width=True,
+    hide_index=True
 )
 
 
 # ==========================================================
-# SECTION 4 - TOTAL DAILY ENERGY
+# SUMMARY
 # ==========================================================
 
-total_daily_energy = (
-    calculate_total_daily_energy(
-        test_appliances
-    )
+summary = create_energy_summary(
+    appliances
+)
+
+
+daily_energy = (
+    summary[
+        "daily_energy_kwh"
+    ]
+)
+
+monthly_energy = (
+    summary[
+        "monthly_energy_kwh"
+    ]
+)
+
+connected_load = (
+    summary[
+        "connected_load_w"
+    ]
 )
 
 
 # ==========================================================
-# SECTION 5 - TOTAL MONTHLY ENERGY
-# ==========================================================
-
-total_monthly_energy = (
-    calculate_total_monthly_energy(
-        test_appliances
-    )
-)
-
-
-# ==========================================================
-# SECTION 6 - RESULTS
+# METRICS
 # ==========================================================
 
 st.divider()
 
 st.header(
-    "📊 Energy Demand Results"
+    "📊 Energy Demand Summary"
 )
 
+col1, col2, col3 = st.columns(3)
 
-result_col1, result_col2 = st.columns(2)
 
-
-result_col1.metric(
-    "Daily Energy Demand",
-    f"{total_daily_energy:.2f} kWh/day"
+col1.metric(
+    "Daily Energy",
+    f"{daily_energy:.2f} kWh/day"
 )
 
+col2.metric(
+    "Monthly Energy",
+    f"{monthly_energy:.2f} kWh/month"
+)
 
-result_col2.metric(
-    "Monthly Energy Demand",
-    f"{total_monthly_energy:.2f} kWh/month"
+col3.metric(
+    "Connected Load",
+    f"{connected_load:.0f} W"
 )
 
 
 # ==========================================================
-# SECTION 7 - ENGINEERING CHECK
+# ENGINEERING TEST
 # ==========================================================
 
 st.divider()
 
 st.header(
-    "🧪 Engineering Test"
+    "🧪 Test Status"
 )
 
 
-if total_daily_energy > 0:
+if daily_energy > 0:
 
     st.success(
-        "✅ Appliance energy calculation is working correctly."
-    )
-
-    st.write(
-        f"""
-        The test appliance group produces an estimated
-        daily energy demand of:
-
-        **{total_daily_energy:.2f} kWh/day**
-
-        This value can now be passed to the Solar PV
-        sizing engine.
-        """
+        "✅ Appliance Energy Module is working correctly."
     )
 
 else:
 
     st.error(
-        "❌ Appliance energy calculation returned zero."
+        "❌ Appliance Energy Module returned zero energy."
     )
 
 
 # ==========================================================
-# SECTION 8 - DEBUG INFORMATION
+# FORMULA
+# ==========================================================
+
+st.info(
+    """
+    **Energy calculation**
+
+    Daily Energy (kWh/day) =
+    Wattage × Quantity × Hours per Day ÷ 1000
+    """
+)
+
+
+# ==========================================================
+# RAW DATA
 # ==========================================================
 
 with st.expander(
-    "🔧 View Raw Test Data"
+    "🔧 View Raw Appliance Data"
 ):
 
-    st.write(
-        test_appliances
+    st.json(
+        appliances
     )
 
 
@@ -253,7 +274,7 @@ st.caption(
     """
     Solar PV Designer Pro Africa™ v2.4.0
 
-    Appliance Energy Module Test
+    Appliance Energy Module
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
