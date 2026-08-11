@@ -1,31 +1,44 @@
+```python
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
 # Main Streamlit Application
-# Version: 2.3.2
+# Version: 2.4.0
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
 #
-# v2.3.2:
-# - Persistent Streamlit session state
-# - Interactive world map
+# v2.4.0
+#
+# NEW:
+# - Appliance Energy Planner
+# - Multiple appliance entry
+# - Appliance wattage
+# - Appliance quantity
+# - Daily operating hours
+# - Automatic daily energy calculation
+# - Monthly energy calculation
+# - Total connected load
+# - Automatic transfer of appliance demand
+#   into PV sizing
+# - Manual energy-demand option
+#
+# RETAINED FROM v2.3:
 # - Worldwide location search
-# - Manual global coordinates
+# - Interactive map
+# - Manual coordinates
 # - NASA POWER integration
-# - Solar resource analytics
-# - Monthly solar-resource graph
+# - Solar-resource statistics
+# - Monthly solar graph
 # - Monthly temperature graph
-# - Solar statistics
-# - Temperature statistics
-# - Seasonal solar analysis
-# - Engineering interpretation
 # - PV sizing
 # - Battery sizing
 # - Inverter sizing
+# - Cost estimation
+# - Carbon reduction
 # - AI Solar Advisor
-# - Professional PDF report generation
+# - PDF report
 #
 # ==========================================================
 
@@ -35,6 +48,7 @@
 # ==========================================================
 
 import streamlit as st
+import pandas as pd
 
 
 # ----------------------------------------------------------
@@ -88,7 +102,7 @@ from utils import (
 
 
 # ----------------------------------------------------------
-# Global location engine
+# Location engine
 # ----------------------------------------------------------
 
 from location_engine import (
@@ -127,11 +141,15 @@ from solar_analytics import (
 
 
 # ----------------------------------------------------------
-# Analytics dashboard
+# Appliance energy engine
 # ----------------------------------------------------------
 
-from analytics_dashboard import (
-    display_analytics_dashboard
+from appliance_energy import (
+    create_appliance,
+    calculate_appliance_energy,
+    calculate_total_daily_energy,
+    calculate_total_monthly_energy,
+    calculate_total_connected_load
 )
 
 
@@ -147,7 +165,7 @@ st.set_page_config(
 
 
 # ==========================================================
-# SECTION 3 - SESSION STATE INITIALIZATION
+# SECTION 3 - SESSION STATE
 # ==========================================================
 
 DEFAULT_STATE = {
@@ -176,7 +194,11 @@ DEFAULT_STATE = {
 
     "selected_map_location": None,
 
-    "analytics": None
+    "appliances": [],
+
+    "energy_source": "Appliance Planner",
+
+    "design_results": None
 
 }
 
@@ -189,7 +211,7 @@ for key, value in DEFAULT_STATE.items():
 
 
 # ==========================================================
-# SECTION 4 - APPLICATION HEADER
+# SECTION 4 - HEADER
 # ==========================================================
 
 st.title(
@@ -202,10 +224,10 @@ st.subheader(
 
 st.write(
     """
-    Solar PV Designer Pro Africa™ is a renewable energy
-    engineering platform designed to support preliminary
-    photovoltaic system sizing, battery analysis, solar
-    resource assessment, cost estimation, environmental
+    Solar PV Designer Pro Africa™ is a renewable-energy
+    engineering platform designed for preliminary
+    photovoltaic system sizing, energy-demand analysis,
+    battery sizing, cost estimation, environmental
     assessment and AI-assisted recommendations.
     """
 )
@@ -233,7 +255,7 @@ except Exception as error:
 # ==========================================================
 
 st.sidebar.header(
-    "⚙️ System Design Inputs"
+    "⚙️ Solar PV System Design"
 )
 
 
@@ -244,7 +266,6 @@ st.sidebar.header(
 st.sidebar.subheader(
     "📍 Project Location"
 )
-
 
 location_source = st.sidebar.radio(
     "Choose location method:",
@@ -259,7 +280,7 @@ location_source = st.sidebar.radio(
 
 
 # ==========================================================
-# SECTION 8 - SOLAR DATABASE
+# SECTION 8 - SOLAR DATABASE LOCATION
 # ==========================================================
 
 if location_source == "Solar Database":
@@ -323,10 +344,6 @@ if location_source == "Solar Database":
             ] = None
 
             st.session_state[
-                "analytics"
-            ] = None
-
-            st.session_state[
                 "location_ready"
             ] = True
 
@@ -345,8 +362,8 @@ if location_source == "Solar Database":
             ] = False
 
             st.sidebar.error(
-                "The selected location contains "
-                "invalid solar-resource data."
+                "The selected location contains invalid "
+                "solar-resource data."
             )
 
     else:
@@ -361,7 +378,7 @@ if location_source == "Solar Database":
 
 
 # ==========================================================
-# SECTION 9 - WORLDWIDE PLACE SEARCH
+# SECTION 9 - WORLDWIDE LOCATION SEARCH
 # ==========================================================
 
 elif location_source == "Search for a Place":
@@ -387,7 +404,6 @@ elif location_source == "Search for a Place":
 
     search_query = st.sidebar.text_input(
         "🔎 Search for a location",
-        value="",
         placeholder="Example: Kano, Nigeria"
     )
 
@@ -431,10 +447,12 @@ elif location_source == "Search for a Place":
                 "location_search_results"
             ] = results
 
+
     search_results = st.session_state.get(
         "location_search_results",
         []
     )
+
 
     if search_results:
 
@@ -488,6 +506,7 @@ elif location_source == "Search for a Place":
             latitude = None
             longitude = None
 
+
         if (
             latitude is not None
             and longitude is not None
@@ -507,9 +526,11 @@ elif location_source == "Search for a Place":
                 )
             )
 
-            retrieve_search_data = st.sidebar.button(
-                "☀️ Get Solar Data",
-                use_container_width=True
+            retrieve_search_data = (
+                st.sidebar.button(
+                    "☀️ Get Solar Data",
+                    use_container_width=True
+                )
             )
 
             if retrieve_search_data:
@@ -546,6 +567,7 @@ elif location_source == "Search for a Place":
 
                             }
 
+
                 if (
                     location_result
                     and location_result.get(
@@ -566,22 +588,13 @@ elif location_source == "Search for a Place":
 
                         summary = {}
 
-                    raw_sun_hours = (
-                        summary.get(
-                            "peak_sun_hours"
-                        )
-                    )
-
-                    raw_temperature = (
-                        summary.get(
-                            "average_temperature"
-                        )
-                    )
 
                     try:
 
                         retrieved_sun_hours = float(
-                            raw_sun_hours
+                            summary.get(
+                                "peak_sun_hours"
+                            )
                         )
 
                     except (
@@ -591,10 +604,13 @@ elif location_source == "Search for a Place":
 
                         retrieved_sun_hours = None
 
+
                     try:
 
                         retrieved_temperature = float(
-                            raw_temperature
+                            summary.get(
+                                "average_temperature"
+                            )
                         )
 
                     except (
@@ -603,6 +619,7 @@ elif location_source == "Search for a Place":
                     ):
 
                         retrieved_temperature = 25.0
+
 
                     if (
                         retrieved_sun_hours is not None
@@ -653,10 +670,6 @@ elif location_source == "Search for a Place":
                         st.session_state[
                             "location_summary"
                         ] = summary
-
-                        st.session_state[
-                            "analytics"
-                        ] = None
 
                         st.session_state[
                             "location_ready"
@@ -782,6 +795,7 @@ elif location_source == "Select on Map":
 
                     }
 
+
             if (
                 location_result
                 and location_result.get(
@@ -802,22 +816,13 @@ elif location_source == "Select on Map":
 
                     summary = {}
 
-                raw_sun_hours = (
-                    summary.get(
-                        "peak_sun_hours"
-                    )
-                )
-
-                raw_temperature = (
-                    summary.get(
-                        "average_temperature"
-                    )
-                )
 
                 try:
 
                     retrieved_sun_hours = float(
-                        raw_sun_hours
+                        summary.get(
+                            "peak_sun_hours"
+                        )
                     )
 
                 except (
@@ -827,10 +832,13 @@ elif location_source == "Select on Map":
 
                     retrieved_sun_hours = None
 
+
                 try:
 
                     retrieved_temperature = float(
-                        raw_temperature
+                        summary.get(
+                            "average_temperature"
+                        )
                     )
 
                 except (
@@ -839,6 +847,7 @@ elif location_source == "Select on Map":
                 ):
 
                     retrieved_temperature = 25.0
+
 
                 if (
                     retrieved_sun_hours is not None
@@ -888,10 +897,6 @@ elif location_source == "Select on Map":
                     ] = summary
 
                     st.session_state[
-                        "analytics"
-                    ] = None
-
-                    st.session_state[
                         "location_ready"
                     ] = True
 
@@ -901,17 +906,14 @@ elif location_source == "Select on Map":
 
                     st.success(
                         "✅ NASA POWER data successfully "
-                        "retrieved for the selected location."
+                        "retrieved."
                     )
 
                 else:
 
                     st.warning(
-                        """
-                        NASA POWER responded successfully,
-                        but no usable solar-resource values
-                        were found.
-                        """
+                        "NASA POWER returned no usable "
+                        "solar-resource values."
                     )
 
             else:
@@ -919,15 +921,6 @@ elif location_source == "Select on Map":
                 st.error(
                     "NASA POWER request failed."
                 )
-
-                if location_result:
-
-                    st.caption(
-                        location_result.get(
-                            "message",
-                            "No additional information."
-                        )
-                    )
 
 
 # ==========================================================
@@ -1014,6 +1007,7 @@ else:
 
                     }
 
+
         if (
             location_result
             and location_result.get(
@@ -1034,22 +1028,13 @@ else:
 
                 summary = {}
 
-            raw_sun_hours = (
-                summary.get(
-                    "peak_sun_hours"
-                )
-            )
-
-            raw_temperature = (
-                summary.get(
-                    "average_temperature"
-                )
-            )
 
             try:
 
                 retrieved_sun_hours = float(
-                    raw_sun_hours
+                    summary.get(
+                        "peak_sun_hours"
+                    )
                 )
 
             except (
@@ -1059,10 +1044,13 @@ else:
 
                 retrieved_sun_hours = None
 
+
             try:
 
                 retrieved_temperature = float(
-                    raw_temperature
+                    summary.get(
+                        "average_temperature"
+                    )
                 )
 
             except (
@@ -1071,6 +1059,7 @@ else:
             ):
 
                 retrieved_temperature = 25.0
+
 
             if (
                 retrieved_sun_hours is not None
@@ -1121,10 +1110,6 @@ else:
                 ] = summary
 
                 st.session_state[
-                    "analytics"
-                ] = None
-
-                st.session_state[
                     "location_ready"
                 ] = True
 
@@ -1151,7 +1136,7 @@ else:
 
 
 # ==========================================================
-# SECTION 12 - RESTORE SESSION VARIABLES
+# SECTION 12 - RESTORE LOCATION VARIABLES
 # ==========================================================
 
 location_ready = st.session_state[
@@ -1192,90 +1177,7 @@ location_summary = st.session_state[
 
 
 # ==========================================================
-# SECTION 13 - GENERATE SOLAR ANALYTICS
-# ==========================================================
-
-analytics = None
-
-if (
-    location_ready
-    and solar_data is not None
-):
-
-    try:
-
-        analytics = analyze_solar_resource(
-            solar_data
-        )
-
-        st.session_state[
-            "analytics"
-        ] = analytics
-
-    except Exception as error:
-
-        analytics = None
-
-        st.warning(
-            f"Solar analytics could not be generated: {error}"
-        )
-
-
-# ==========================================================
-# SECTION 14 - SYSTEM DESIGN INPUTS
-# ==========================================================
-
-st.sidebar.divider()
-
-st.sidebar.subheader(
-    "🔋 System Design"
-)
-
-energy = st.sidebar.number_input(
-    "Daily Energy Demand (kWh/day)",
-    min_value=0.1,
-    value=5.0,
-    step=0.5
-)
-
-efficiency_percent = st.sidebar.slider(
-    "Overall System Efficiency (%)",
-    min_value=50,
-    max_value=100,
-    value=80
-)
-
-efficiency = (
-    efficiency_percent / 100
-)
-
-battery_type = st.sidebar.selectbox(
-    "Battery Technology",
-    [
-        "Lithium-ion",
-        "Lead Acid"
-    ]
-)
-
-days = st.sidebar.number_input(
-    "Battery Backup / Autonomy (Days)",
-    min_value=1,
-    max_value=30,
-    value=3
-)
-
-panel_rating = st.sidebar.selectbox(
-    "Solar Panel Rating (Watts)",
-    [
-        450,
-        550,
-        600
-    ]
-)
-
-
-# ==========================================================
-# SECTION 15 - LOCATION INFORMATION
+# SECTION 13 - LOCATION INFORMATION
 # ==========================================================
 
 st.header(
@@ -1382,7 +1284,7 @@ else:
 
 
 # ==========================================================
-# SECTION 16 - NASA POWER DATA
+# SECTION 14 - NASA POWER DATA
 # ==========================================================
 
 if (
@@ -1413,7 +1315,8 @@ if (
 
                 st.dataframe(
                     monthly_display,
-                    use_container_width=True
+                    use_container_width=True,
+                    hide_index=True
                 )
 
             else:
@@ -1430,31 +1333,883 @@ if (
 
 
 # ==========================================================
-# SECTION 17 - SOLAR ANALYTICS DASHBOARD
+# SECTION 15 - SOLAR ANALYTICS
 # ==========================================================
 
-if analytics is not None:
+if (
+    location_ready
+    and
+    isinstance(
+        solar_data,
+        dict
+    )
+):
 
     st.divider()
 
-    display_analytics_dashboard(
-        analytics
+    st.header(
+        "📈 Solar Resource Analytics"
+    )
+
+    try:
+
+        analytics = analyze_solar_resource(
+            solar_data
+        )
+
+    except Exception as error:
+
+        analytics = {}
+
+        st.warning(
+            f"Solar analytics could not be calculated: {error}"
+        )
+
+
+    solar_statistics = analytics.get(
+        "solar_statistics",
+        {}
+    )
+
+    temperature_statistics = analytics.get(
+        "temperature_statistics",
+        {}
+    )
+
+    seasonal_analysis = analytics.get(
+        "seasonal_analysis",
+        {}
+    )
+
+    monthly_solar = analytics.get(
+        "monthly_solar",
+        []
+    )
+
+    monthly_temperature = analytics.get(
+        "monthly_temperature",
+        []
+    )
+
+
+    # ------------------------------------------------------
+    # Solar statistics
+    # ------------------------------------------------------
+
+    st.subheader(
+        "☀️ Solar Resource Statistics"
+    )
+
+    solar_col1, solar_col2, solar_col3 = (
+        st.columns(3)
+    )
+
+    annual_average = solar_statistics.get(
+        "annual_average"
+    )
+
+    maximum = solar_statistics.get(
+        "maximum"
+    )
+
+    minimum = solar_statistics.get(
+        "minimum"
+    )
+
+
+    solar_col1.metric(
+        "Annual Average",
+        (
+            f"{float(annual_average):.2f} kWh/m²/day"
+            if annual_average is not None
+            else "N/A"
+        )
+    )
+
+    solar_col2.metric(
+        "Maximum",
+        (
+            f"{float(maximum):.2f} kWh/m²/day"
+            if maximum is not None
+            else "N/A"
+        )
+    )
+
+    solar_col3.metric(
+        "Minimum",
+        (
+            f"{float(minimum):.2f} kWh/m²/day"
+            if minimum is not None
+            else "N/A"
+        )
+    )
+
+
+    best_month = solar_statistics.get(
+        "best_month"
+    )
+
+    lowest_month = solar_statistics.get(
+        "lowest_month"
+    )
+
+
+    st.write(
+        f"**Best Solar Month:** "
+        f"{best_month or 'N/A'}"
+    )
+
+    st.write(
+        f"**Lowest Solar Month:** "
+        f"{lowest_month or 'N/A'}"
+    )
+
+
+    # ------------------------------------------------------
+    # Monthly solar graph
+    # ------------------------------------------------------
+
+    if monthly_solar:
+
+        solar_chart_data = pd.DataFrame(
+            monthly_solar
+        )
+
+        solar_chart_data = (
+            solar_chart_data[
+                [
+                    "month_short",
+                    "solar_value"
+                ]
+            ]
+            .set_index(
+                "month_short"
+            )
+        )
+
+        solar_chart_data.columns = [
+            "Solar Resource (kWh/m²/day)"
+        ]
+
+        st.subheader(
+            "☀️ Monthly Solar Resource"
+        )
+
+        st.line_chart(
+            solar_chart_data,
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No monthly solar data available for graphing."
+        )
+
+
+    # ------------------------------------------------------
+    # Temperature statistics
+    # ------------------------------------------------------
+
+    st.subheader(
+        "🌡️ Temperature Statistics"
+    )
+
+    temp_col1, temp_col2, temp_col3 = (
+        st.columns(3)
+    )
+
+    temp_average = temperature_statistics.get(
+        "annual_average"
+    )
+
+    temp_maximum = temperature_statistics.get(
+        "maximum"
+    )
+
+    temp_minimum = temperature_statistics.get(
+        "minimum"
+    )
+
+
+    temp_col1.metric(
+        "Annual Average",
+        (
+            f"{float(temp_average):.1f} °C"
+            if temp_average is not None
+            else "N/A"
+        )
+    )
+
+    temp_col2.metric(
+        "Maximum",
+        (
+            f"{float(temp_maximum):.1f} °C"
+            if temp_maximum is not None
+            else "N/A"
+        )
+    )
+
+    temp_col3.metric(
+        "Minimum",
+        (
+            f"{float(temp_minimum):.1f} °C"
+            if temp_minimum is not None
+            else "N/A"
+        )
+    )
+
+
+    hottest_month = temperature_statistics.get(
+        "hottest_month"
+    )
+
+    coolest_month = temperature_statistics.get(
+        "coolest_month"
+    )
+
+
+    st.write(
+        f"**Hottest Month:** "
+        f"{hottest_month or 'N/A'}"
+    )
+
+    st.write(
+        f"**Coolest Month:** "
+        f"{coolest_month or 'N/A'}"
+    )
+
+
+    # ------------------------------------------------------
+    # Monthly temperature graph
+    # ------------------------------------------------------
+
+    if monthly_temperature:
+
+        temperature_chart_data = pd.DataFrame(
+            monthly_temperature
+        )
+
+        temperature_chart_data = (
+            temperature_chart_data[
+                [
+                    "month_short",
+                    "temperature"
+                ]
+            ]
+            .set_index(
+                "month_short"
+            )
+        )
+
+        temperature_chart_data.columns = [
+            "Temperature (°C)"
+        ]
+
+        st.subheader(
+            "🌡️ Monthly Temperature"
+        )
+
+        st.line_chart(
+            temperature_chart_data,
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No monthly temperature data available for graphing."
+        )
+
+
+    # ------------------------------------------------------
+    # Seasonal analysis
+    # ------------------------------------------------------
+
+    st.subheader(
+        "🌤️ Seasonal Solar Analysis"
+    )
+
+    high_months = seasonal_analysis.get(
+        "high_solar_months",
+        []
+    )
+
+    medium_months = seasonal_analysis.get(
+        "medium_solar_months",
+        []
+    )
+
+    low_months = seasonal_analysis.get(
+        "low_solar_months",
+        []
+    )
+
+
+    seasonal_col1, seasonal_col2, seasonal_col3 = (
+        st.columns(3)
+    )
+
+
+    with seasonal_col1:
+
+        st.markdown(
+            "**🟢 High Solar Months**"
+        )
+
+        if high_months:
+
+            st.write(
+                ", ".join(
+                    high_months
+                )
+            )
+
+        else:
+
+            st.write(
+                "No months classified"
+            )
+
+
+    with seasonal_col2:
+
+        st.markdown(
+            "**🟡 Medium Solar Months**"
+        )
+
+        if medium_months:
+
+            st.write(
+                ", ".join(
+                    medium_months
+                )
+            )
+
+        else:
+
+            st.write(
+                "No months classified"
+            )
+
+
+    with seasonal_col3:
+
+        st.markdown(
+            "**🔴 Low Solar Months**"
+        )
+
+        if low_months:
+
+            st.write(
+                ", ".join(
+                    low_months
+                )
+            )
+
+        else:
+
+            st.write(
+                "No months classified"
+            )
+
+
+# ==========================================================
+# SECTION 16 - APPLIANCE ENERGY PLANNER
+# ==========================================================
+
+st.divider()
+
+st.header(
+    "🔌 Appliance Energy Planner"
+)
+
+st.write(
+    """
+    Build your electricity demand from the appliances
+    used at the project site. The calculated daily energy
+    demand can be transferred automatically into the
+    solar PV sizing engine.
+    """
+)
+
+
+# ----------------------------------------------------------
+# Common appliance presets
+# ----------------------------------------------------------
+
+APPLIANCE_PRESETS = {
+
+    "LED Light": 20,
+
+    "Fan": 75,
+
+    "Television": 100,
+
+    "Refrigerator": 150,
+
+    "Freezer": 200,
+
+    "Air Conditioner": 1200,
+
+    "Laptop": 65,
+
+    "Desktop Computer": 200,
+
+    "Water Pump": 750,
+
+    "Electric Iron": 1000,
+
+    "Microwave": 1200,
+
+    "Washing Machine": 500,
+
+    "Phone Charger": 10,
+
+    "Electric Kettle": 1500,
+
+    "Custom Appliance": 0
+
+}
+
+
+# ----------------------------------------------------------
+# Add appliance controls
+# ----------------------------------------------------------
+
+with st.expander(
+    "➕ Add Appliance",
+    expanded=True
+):
+
+    appliance_col1, appliance_col2 = (
+        st.columns(2)
+    )
+
+    with appliance_col1:
+
+        appliance_name = st.selectbox(
+            "Appliance",
+            list(
+                APPLIANCE_PRESETS.keys()
+            ),
+            key="new_appliance_name"
+        )
+
+        if appliance_name == "Custom Appliance":
+
+            custom_name = st.text_input(
+                "Custom Appliance Name",
+                value="My Appliance"
+            )
+
+            selected_name = custom_name
+
+        else:
+
+            selected_name = appliance_name
+
+
+    with appliance_col2:
+
+        default_wattage = (
+            APPLIANCE_PRESETS[
+                appliance_name
+            ]
+        )
+
+        appliance_wattage = st.number_input(
+            "Power Rating (Watts)",
+            min_value=0.0,
+            value=float(
+                default_wattage
+            ),
+            step=10.0,
+            key="new_appliance_wattage"
+        )
+
+
+    appliance_col3, appliance_col4 = (
+        st.columns(2)
+    )
+
+    with appliance_col3:
+
+        appliance_quantity = st.number_input(
+            "Quantity",
+            min_value=1,
+            value=1,
+            step=1,
+            key="new_appliance_quantity"
+        )
+
+    with appliance_col4:
+
+        appliance_hours = st.number_input(
+            "Hours Used per Day",
+            min_value=0.0,
+            max_value=24.0,
+            value=5.0,
+            step=0.5,
+            key="new_appliance_hours"
+        )
+
+
+    add_appliance = st.button(
+        "➕ Add Appliance to Energy Schedule",
+        type="primary",
+        use_container_width=True
+    )
+
+
+    if add_appliance:
+
+        new_appliance = create_appliance(
+
+            name=selected_name,
+
+            wattage=appliance_wattage,
+
+            hours_per_day=appliance_hours,
+
+            quantity=appliance_quantity
+
+        )
+
+        st.session_state[
+            "appliances"
+        ].append(
+            new_appliance
+        )
+
+        st.success(
+            f"✅ {selected_name} added to the energy schedule."
+        )
+
+        st.rerun()
+
+
+# ==========================================================
+# SECTION 17 - APPLIANCE ENERGY TABLE
+# ==========================================================
+
+appliances = st.session_state[
+    "appliances"
+]
+
+
+if appliances:
+
+    st.subheader(
+        "📋 Appliance Energy Schedule"
+    )
+
+    appliance_rows = []
+
+
+    for index, appliance in enumerate(
+        appliances
+    ):
+
+        daily_energy = (
+            calculate_appliance_energy(
+                appliance
+            )
+        )
+
+        connected_load = (
+            appliance["wattage"]
+            *
+            appliance["quantity"]
+        )
+
+        appliance_rows.append({
+
+            "No.":
+                index + 1,
+
+            "Appliance":
+                appliance["name"],
+
+            "Quantity":
+                appliance["quantity"],
+
+            "Power (W)":
+                appliance["wattage"],
+
+            "Hours/Day":
+                appliance["hours_per_day"],
+
+            "Connected Load (W)":
+                connected_load,
+
+            "Daily Energy (kWh)":
+                round(
+                    daily_energy,
+                    3
+                )
+
+        })
+
+
+    st.dataframe(
+        appliance_rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+    # ------------------------------------------------------
+    # Appliance totals
+    # ------------------------------------------------------
+
+    total_daily_energy = (
+        calculate_total_daily_energy(
+            appliances
+        )
+    )
+
+    total_monthly_energy = (
+        calculate_total_monthly_energy(
+            appliances
+        )
+    )
+
+    total_connected_load = (
+        calculate_total_connected_load(
+            appliances
+        )
+    )
+
+
+    energy_col1, energy_col2, energy_col3 = (
+        st.columns(3)
+    )
+
+
+    energy_col1.metric(
+        "☀️ Daily Energy Demand",
+        f"{total_daily_energy:.2f} kWh/day"
+    )
+
+    energy_col2.metric(
+        "📅 Monthly Energy",
+        f"{total_monthly_energy:.2f} kWh/month"
+    )
+
+    energy_col3.metric(
+        "⚡ Connected Load",
+        f"{total_connected_load:.0f} W"
+    )
+
+
+    # ------------------------------------------------------
+    # Remove appliance
+    # ------------------------------------------------------
+
+    st.subheader(
+        "🗑️ Appliance Management"
+    )
+
+    remove_options = [
+
+        f"{index + 1}. "
+        f"{appliance['name']}"
+
+        for index, appliance
+        in enumerate(appliances)
+
+    ]
+
+
+    remove_selection = st.selectbox(
+        "Select appliance to remove",
+        remove_options,
+        key="remove_appliance_selection"
+    )
+
+
+    remove_button = st.button(
+        "🗑️ Remove Selected Appliance"
+    )
+
+
+    if remove_button:
+
+        remove_index = (
+            remove_options.index(
+                remove_selection
+            )
+        )
+
+        removed_appliance = (
+            st.session_state[
+                "appliances"
+            ].pop(
+                remove_index
+            )
+        )
+
+        st.success(
+            f"Removed {removed_appliance['name']}."
+        )
+
+        st.rerun()
+
+
+    clear_button = st.button(
+        "🧹 Clear All Appliances"
+    )
+
+
+    if clear_button:
+
+        st.session_state[
+            "appliances"
+        ] = []
+
+        st.rerun()
+
+
+else:
+
+    st.info(
+        """
+        No appliances have been added yet.
+
+        Add appliances above to automatically calculate
+        your electricity demand.
+        """
     )
 
 
 # ==========================================================
-# SECTION 18 - DESIGN BUTTON
+# SECTION 18 - ENERGY DEMAND SOURCE
+# ==========================================================
+
+st.divider()
+
+st.subheader(
+    "⚡ Energy Demand for PV Design"
+)
+
+
+energy_source = st.radio(
+    "Choose how daily energy demand should be obtained:",
+    [
+        "Use Appliance Planner",
+        "Enter Manually"
+    ],
+    horizontal=True,
+    key="energy_source_selector"
+)
+
+
+if energy_source == "Use Appliance Planner":
+
+    if appliances:
+
+        energy = st.number_input(
+            "Calculated Daily Energy Demand (kWh/day)",
+            min_value=0.1,
+            value=float(
+                total_daily_energy
+            ),
+            step=0.1,
+            disabled=True
+        )
+
+        st.success(
+            f"Appliance planner demand of "
+            f"**{total_daily_energy:.2f} kWh/day** "
+            f"will be used for PV sizing."
+        )
+
+    else:
+
+        energy = 0.0
+
+        st.warning(
+            "Add at least one appliance before designing "
+            "the solar PV system."
+        )
+
+else:
+
+    energy = st.number_input(
+        "Daily Energy Demand (kWh/day)",
+        min_value=0.1,
+        value=5.0,
+        step=0.5
+    )
+
+
+# ==========================================================
+# SECTION 19 - SYSTEM DESIGN PARAMETERS
+# ==========================================================
+
+st.sidebar.divider()
+
+st.sidebar.subheader(
+    "🔋 System Design"
+)
+
+
+efficiency_percent = st.sidebar.slider(
+    "Overall System Efficiency (%)",
+    min_value=50,
+    max_value=100,
+    value=80
+)
+
+efficiency = (
+    efficiency_percent / 100
+)
+
+
+battery_type = st.sidebar.selectbox(
+    "Battery Technology",
+    [
+        "Lithium-ion",
+        "Lead Acid"
+    ]
+)
+
+
+days = st.sidebar.number_input(
+    "Battery Backup / Autonomy (Days)",
+    min_value=1,
+    max_value=30,
+    value=3
+)
+
+
+panel_rating = st.sidebar.selectbox(
+    "Solar Panel Rating (Watts)",
+    [
+        450,
+        550,
+        600
+    ]
+)
+
+
+# ==========================================================
+# SECTION 20 - DESIGN BUTTON
 # ==========================================================
 
 design_button = st.button(
     "🚀 Design Solar PV System",
     type="primary",
-    disabled=not location_ready
+    disabled=(
+        not location_ready
+        or energy <= 0
+    )
 )
 
 
 # ==========================================================
-# SECTION 19 - ENGINEERING CALCULATIONS
+# SECTION 21 - ENGINEERING CALCULATIONS
 # ==========================================================
 
 if design_button and location_ready:
@@ -1475,6 +2230,7 @@ if design_button and location_ready:
 
     )
 
+
     # ------------------------------------------------------
     # Solar panels
     # ------------------------------------------------------
@@ -1486,6 +2242,7 @@ if design_button and location_ready:
         panel_rating=panel_rating
 
     )
+
 
     # ------------------------------------------------------
     # Battery
@@ -1501,6 +2258,7 @@ if design_button and location_ready:
 
     )
 
+
     # ------------------------------------------------------
     # Inverter
     # ------------------------------------------------------
@@ -1509,6 +2267,7 @@ if design_button and location_ready:
         pv_size
     )
 
+
     # ------------------------------------------------------
     # Charge controller
     # ------------------------------------------------------
@@ -1516,6 +2275,7 @@ if design_button and location_ready:
     controller_current = (
         pv_size * 1000 / 48
     )
+
 
     # ------------------------------------------------------
     # Cost estimation
@@ -1551,8 +2311,9 @@ if design_button and location_ready:
         installation_cost
     )
 
+
     # ------------------------------------------------------
-    # Environmental impact
+    # Carbon reduction
     # ------------------------------------------------------
 
     carbon_reduction = calculate_carbon(
@@ -1560,47 +2321,157 @@ if design_button and location_ready:
     )
 
 
-    # ======================================================
-    # SECTION 20 - ENGINEERING RESULTS
-    # ======================================================
+    # ------------------------------------------------------
+    # Store design results
+    # ------------------------------------------------------
+
+    st.session_state[
+        "design_results"
+    ] = {
+
+        "energy":
+            energy,
+
+        "pv":
+            pv_size,
+
+        "panels":
+            panels,
+
+        "panel_rating":
+            panel_rating,
+
+        "battery":
+            battery_capacity,
+
+        "battery_type":
+            battery_type,
+
+        "inverter":
+            inverter_size,
+
+        "controller":
+            controller_current,
+
+        "panel_cost":
+            panel_cost,
+
+        "battery_cost":
+            battery_cost,
+
+        "inverter_cost":
+            inverter_cost,
+
+        "installation_cost":
+            installation_cost,
+
+        "cost":
+            total_cost,
+
+        "carbon":
+            carbon_reduction
+
+    }
+
+
+# ==========================================================
+# SECTION 22 - DISPLAY DESIGN RESULTS
+# ==========================================================
+
+results = st.session_state.get(
+    "design_results"
+)
+
+
+if results:
+
+    pv_size = results[
+        "pv"
+    ]
+
+    panels = results[
+        "panels"
+    ]
+
+    battery_capacity = results[
+        "battery"
+    ]
+
+    inverter_size = results[
+        "inverter"
+    ]
+
+    controller_current = results[
+        "controller"
+    ]
+
+    panel_cost = results[
+        "panel_cost"
+    ]
+
+    battery_cost = results[
+        "battery_cost"
+    ]
+
+    inverter_cost = results[
+        "inverter_cost"
+    ]
+
+    installation_cost = results[
+        "installation_cost"
+    ]
+
+    total_cost = results[
+        "cost"
+    ]
+
+    carbon_reduction = results[
+        "carbon"
+    ]
+
+    st.divider()
 
     st.header(
         "📊 Solar PV Design Results"
     )
 
+
     result_col1, result_col2, result_col3 = (
         st.columns(3)
     )
+
 
     result_col1.metric(
         "PV Capacity",
         f"{pv_size:.2f} kW"
     )
 
+
     result_col2.metric(
         "Battery Capacity",
         f"{battery_capacity:.2f} kWh"
     )
+
 
     result_col3.metric(
         "Inverter",
         f"{inverter_size:.2f} kW"
     )
 
-    st.divider()
 
-
-    # ======================================================
-    # SECTION 21 - EQUIPMENT RECOMMENDATION
-    # ======================================================
+    # ------------------------------------------------------
+    # Equipment
+    # ------------------------------------------------------
 
     st.subheader(
         "⚡ Recommended Equipment"
     )
 
+
     equipment_col1, equipment_col2 = (
         st.columns(2)
     )
+
 
     with equipment_col1:
 
@@ -1617,6 +2488,7 @@ if design_button and location_ready:
             {battery_capacity:.2f} kWh
             """
         )
+
 
     with equipment_col2:
 
@@ -1636,6 +2508,7 @@ if design_button and location_ready:
             """
         )
 
+
     st.success(
         f"Estimated annual CO₂ reduction: "
         f"{carbon_reduction:,.0f} kg/year"
@@ -1643,7 +2516,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 22 - AI SOLAR ADVISOR
+    # SECTION 23 - AI SOLAR ADVISOR
     # ======================================================
 
     st.divider()
@@ -1651,6 +2524,7 @@ if design_button and location_ready:
     st.header(
         "🤖 AI Solar Advisor"
     )
+
 
     try:
 
@@ -1684,6 +2558,7 @@ if design_button and location_ready:
 
         ]
 
+
     for recommendation in recommendations:
 
         st.success(
@@ -1692,7 +2567,7 @@ if design_button and location_ready:
 
 
     # ======================================================
-    # SECTION 23 - PDF REPORT DATA
+    # SECTION 24 - PDF REPORT DATA
     # ======================================================
 
     report_data = {
@@ -1754,9 +2629,16 @@ if design_button and location_ready:
         "data_source":
             st.session_state[
                 "location_source"
-            ]
+            ],
+
+        "energy_source":
+            energy_source,
+
+        "appliances":
+            appliances
 
     }
+
 
     if latitude is not None:
 
@@ -1764,11 +2646,13 @@ if design_button and location_ready:
             "latitude"
         ] = latitude
 
+
     if longitude is not None:
 
         report_data[
             "longitude"
         ] = longitude
+
 
     if location_summary:
 
@@ -1778,19 +2662,9 @@ if design_button and location_ready:
             "climatology_period"
         )
 
-    # ------------------------------------------------------
-    # Add analytics to report data
-    # ------------------------------------------------------
-
-    if analytics is not None:
-
-        report_data[
-            "solar_analytics"
-        ] = analytics
-
 
     # ======================================================
-    # SECTION 24 - PDF REPORT
+    # SECTION 25 - PDF REPORT
     # ======================================================
 
     st.divider()
@@ -1798,6 +2672,7 @@ if design_button and location_ready:
     st.header(
         "📄 Solar Design Report"
     )
+
 
     try:
 
@@ -1808,6 +2683,7 @@ if design_button and location_ready:
             recommendations=recommendations
 
         )
+
 
         st.download_button(
 
@@ -1834,17 +2710,17 @@ if design_button and location_ready:
 
 
 # ==========================================================
-# SECTION 25 - FOOTER
+# SECTION 26 - FOOTER
 # ==========================================================
 
 st.divider()
 
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.3.2
+    Solar PV Designer Pro Africa™ v2.4.0
 
-    Worldwide Location Search + Interactive Map
-    + NASA POWER + Solar Analytics
+    Appliance Energy Planner + Worldwide Location Search
+    + Interactive Map + NASA POWER + Solar Analytics
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
@@ -1853,3 +2729,4 @@ st.caption(
     research and demonstration purposes.
     """
 )
+```
