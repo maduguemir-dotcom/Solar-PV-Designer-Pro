@@ -2,373 +2,693 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# Appliance Energy Calculation Engine
+# Appliance Energy Calculator
 # Version: 2.4.0
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
 #
 # Purpose:
-# Calculate electricity consumption from appliances
-# and determine total daily and monthly energy demand.
+# Calculate household/business energy demand from
+# individual appliances and prepare the results for
+# integration with the Solar PV Designer Pro dashboard.
 #
 # ==========================================================
 
 
 # ==========================================================
-# SECTION 1 - CREATE APPLIANCE
+# SECTION 1 - DEFAULT APPLIANCE LIBRARY
 # ==========================================================
 
-def create_appliance(
+DEFAULT_APPLIANCES = [
+    {
+        "name": "LED Light",
+        "category": "Lighting",
+        "default_wattage": 10
+    },
+    {
+        "name": "Ceiling Fan",
+        "category": "Cooling",
+        "default_wattage": 60
+    },
+    {
+        "name": "Standing Fan",
+        "category": "Cooling",
+        "default_wattage": 75
+    },
+    {
+        "name": "Television",
+        "category": "Entertainment",
+        "default_wattage": 100
+    },
+    {
+        "name": "Refrigerator",
+        "category": "Kitchen",
+        "default_wattage": 150
+    },
+    {
+        "name": "Freezer",
+        "category": "Kitchen",
+        "default_wattage": 200
+    },
+    {
+        "name": "Laptop",
+        "category": "Office",
+        "default_wattage": 65
+    },
+    {
+        "name": "Desktop Computer",
+        "category": "Office",
+        "default_wattage": 200
+    },
+    {
+        "name": "Phone Charger",
+        "category": "Electronics",
+        "default_wattage": 10
+    },
+    {
+        "name": "Wi-Fi Router",
+        "category": "Electronics",
+        "default_wattage": 15
+    },
+    {
+        "name": "Electric Iron",
+        "category": "Kitchen",
+        "default_wattage": 1200
+    },
+    {
+        "name": "Electric Kettle",
+        "category": "Kitchen",
+        "default_wattage": 1500
+    },
+    {
+        "name": "Microwave",
+        "category": "Kitchen",
+        "default_wattage": 1200
+    },
+    {
+        "name": "Washing Machine",
+        "category": "Laundry",
+        "default_wattage": 500
+    },
+    {
+        "name": "Water Pump",
+        "category": "Water",
+        "default_wattage": 750
+    },
+    {
+        "name": "Air Conditioner",
+        "category": "Cooling",
+        "default_wattage": 1200
+    },
+    {
+        "name": "Electric Cooker",
+        "category": "Kitchen",
+        "default_wattage": 2000
+    },
+    {
+        "name": "Printer",
+        "category": "Office",
+        "default_wattage": 100
+    }
+]
+
+
+# ==========================================================
+# SECTION 2 - SAFE NUMERIC CONVERSION
+# ==========================================================
+
+def safe_float(value, default=0.0):
+    """
+    Safely convert a value to float.
+
+    Returns default if conversion fails.
+    """
+
+    try:
+        if value is None:
+            return float(default)
+
+        return float(value)
+
+    except (TypeError, ValueError):
+        return float(default)
+
+
+# ==========================================================
+# SECTION 3 - VALIDATE APPLIANCE INPUT
+# ==========================================================
+
+def validate_appliance(
     name,
+    quantity,
     wattage,
-    hours_per_day,
-    quantity=1
+    hours_per_day
 ):
     """
-    Create a standardized appliance record.
-
-    Parameters:
-        name           Appliance name
-        wattage        Power rating in watts
-        hours_per_day  Daily operating hours
-        quantity       Number of appliances
+    Validate appliance information.
 
     Returns:
-        Dictionary containing appliance information.
+        {
+            "valid": True/False,
+            "message": "..."
+        }
     """
 
-    try:
-        wattage = float(wattage)
-    except (TypeError, ValueError):
-        wattage = 0.0
+    if not str(name).strip():
 
-    try:
-        hours_per_day = float(hours_per_day)
-    except (TypeError, ValueError):
-        hours_per_day = 0.0
+        return {
+            "valid": False,
+            "message": "Appliance name is required."
+        }
 
-    try:
-        quantity = int(quantity)
-    except (TypeError, ValueError):
-        quantity = 1
+    quantity = safe_float(quantity)
+    wattage = safe_float(wattage)
+    hours_per_day = safe_float(hours_per_day)
 
-    if wattage < 0:
-        wattage = 0.0
+    if quantity <= 0:
+
+        return {
+            "valid": False,
+            "message": "Quantity must be greater than zero."
+        }
+
+    if wattage <= 0:
+
+        return {
+            "valid": False,
+            "message": "Wattage must be greater than zero."
+        }
 
     if hours_per_day < 0:
-        hours_per_day = 0.0
+
+        return {
+            "valid": False,
+            "message": "Hours per day cannot be negative."
+        }
 
     if hours_per_day > 24:
-        hours_per_day = 24.0
 
-    if quantity < 1:
-        quantity = 1
+        return {
+            "valid": False,
+            "message": "Hours per day cannot exceed 24."
+        }
+
+    return {
+        "valid": True,
+        "message": "Appliance data is valid."
+    }
+
+
+# ==========================================================
+# SECTION 4 - CALCULATE APPLIANCE ENERGY
+# ==========================================================
+
+def calculate_appliance_energy(
+    name,
+    quantity,
+    wattage,
+    hours_per_day
+):
+    """
+    Calculate energy consumption for one appliance.
+
+    Formula:
+
+        Daily Wh =
+            Quantity × Wattage × Hours/day
+
+        Daily kWh =
+            Daily Wh / 1000
+
+        Monthly kWh =
+            Daily kWh × 30
+    """
+
+    validation = validate_appliance(
+        name,
+        quantity,
+        wattage,
+        hours_per_day
+    )
+
+    if not validation["valid"]:
+
+        raise ValueError(
+            validation["message"]
+        )
+
+    quantity = safe_float(quantity)
+    wattage = safe_float(wattage)
+    hours_per_day = safe_float(hours_per_day)
+
+    daily_wh = (
+        quantity
+        * wattage
+        * hours_per_day
+    )
+
+    daily_kwh = (
+        daily_wh / 1000
+    )
+
+    monthly_kwh = (
+        daily_kwh * 30
+    )
 
     return {
         "name": str(name).strip(),
+        "quantity": quantity,
         "wattage": wattage,
         "hours_per_day": hours_per_day,
-        "quantity": quantity
+        "daily_wh": daily_wh,
+        "daily_kwh": daily_kwh,
+        "monthly_kwh": monthly_kwh
     }
 
 
 # ==========================================================
-# SECTION 2 - CALCULATE APPLIANCE ENERGY
+# SECTION 5 - CALCULATE TOTAL ENERGY DEMAND
 # ==========================================================
 
-def calculate_appliance_energy(appliance):
-    """
-    Calculate daily energy consumption of one appliance.
-
-    Formula:
-
-        Energy (kWh/day)
-        =
-        Wattage × Hours × Quantity / 1000
-    """
-
-    if not isinstance(appliance, dict):
-        return 0.0
-
-    try:
-        wattage = float(
-            appliance.get(
-                "wattage",
-                0
-            )
-        )
-
-        hours = float(
-            appliance.get(
-                "hours_per_day",
-                0
-            )
-        )
-
-        quantity = float(
-            appliance.get(
-                "quantity",
-                1
-            )
-        )
-
-    except (TypeError, ValueError):
-        return 0.0
-
-    if wattage < 0:
-        wattage = 0.0
-
-    if hours < 0:
-        hours = 0.0
-
-    if quantity < 0:
-        quantity = 0.0
-
-    daily_energy = (
-        wattage
-        *
-        hours
-        *
-        quantity
-        /
-        1000
-    )
-
-    return daily_energy
-
-
-# ==========================================================
-# SECTION 3 - CALCULATE TOTAL DAILY ENERGY
-# ==========================================================
-
-def calculate_total_daily_energy(appliances):
-    """
-    Calculate total daily energy consumption.
-
-    Parameters:
-        appliances:
-            List of appliance dictionaries.
-
-    Returns:
-        Total kWh/day.
-    """
-
-    if not isinstance(
-        appliances,
-        list
-    ):
-        return 0.0
-
-    total = 0.0
-
-    for appliance in appliances:
-
-        total += calculate_appliance_energy(
-            appliance
-        )
-
-    return total
-
-
-# ==========================================================
-# SECTION 4 - CALCULATE TOTAL MONTHLY ENERGY
-# ==========================================================
-
-def calculate_total_monthly_energy(
-    appliances,
-    days_per_month=30
-):
-    """
-    Calculate total monthly energy consumption.
-
-    Default:
-        30 days/month.
-
-    Returns:
-        Total kWh/month.
-    """
-
-    daily_energy = (
-        calculate_total_daily_energy(
-            appliances
-        )
-    )
-
-    try:
-        days = float(
-            days_per_month
-        )
-    except (TypeError, ValueError):
-        days = 30.0
-
-    if days < 0:
-        days = 0.0
-
-    return (
-        daily_energy
-        *
-        days
-    )
-
-
-# ==========================================================
-# SECTION 5 - CALCULATE APPLIANCE LOAD
-# ==========================================================
-
-def calculate_appliance_load(appliance):
-    """
-    Calculate the instantaneous power demand
-    of an appliance.
-
-    Formula:
-
-        Load (W)
-        =
-        Wattage × Quantity
-    """
-
-    if not isinstance(
-        appliance,
-        dict
-    ):
-        return 0.0
-
-    try:
-
-        wattage = float(
-            appliance.get(
-                "wattage",
-                0
-            )
-        )
-
-        quantity = float(
-            appliance.get(
-                "quantity",
-                1
-            )
-        )
-
-    except (TypeError, ValueError):
-
-        return 0.0
-
-    return (
-        wattage
-        *
-        quantity
-    )
-
-
-# ==========================================================
-# SECTION 6 - CALCULATE TOTAL CONNECTED LOAD
-# ==========================================================
-
-def calculate_total_connected_load(
+def calculate_total_energy(
     appliances
 ):
     """
-    Calculate total connected appliance load.
+    Calculate total energy demand from an appliance list.
 
     Returns:
-        Total watts.
+
+        total_daily_wh
+        total_daily_kwh
+        total_monthly_kwh
     """
 
-    if not isinstance(
-        appliances,
-        list
-    ):
-        return 0.0
+    if not appliances:
 
-    total_load = 0.0
+        return {
+            "total_daily_wh": 0.0,
+            "total_daily_kwh": 0.0,
+            "total_monthly_kwh": 0.0
+        }
+
+    total_daily_wh = 0.0
 
     for appliance in appliances:
 
-        total_load += (
-            calculate_appliance_load(
-                appliance
+        total_daily_wh += safe_float(
+            appliance.get(
+                "daily_wh",
+                0
             )
         )
 
-    return total_load
-
-
-# ==========================================================
-# SECTION 7 - CREATE ENERGY SUMMARY
-# ==========================================================
-
-def create_energy_summary(
-    appliances
-):
-    """
-    Create a complete appliance-energy summary.
-    """
-
-    daily_energy = (
-        calculate_total_daily_energy(
-            appliances
-        )
+    total_daily_kwh = (
+        total_daily_wh / 1000
     )
 
-    monthly_energy = (
-        calculate_total_monthly_energy(
-            appliances
-        )
-    )
-
-    connected_load = (
-        calculate_total_connected_load(
-            appliances
-        )
+    total_monthly_kwh = (
+        total_daily_kwh * 30
     )
 
     return {
-
-        "daily_energy_kwh":
-            daily_energy,
-
-        "monthly_energy_kwh":
-            monthly_energy,
-
-        "connected_load_w":
-            connected_load,
-
-        "connected_load_kw":
-            connected_load / 1000
-
+        "total_daily_wh": total_daily_wh,
+        "total_daily_kwh": total_daily_kwh,
+        "total_monthly_kwh": total_monthly_kwh
     }
 
 
 # ==========================================================
-# SECTION 8 - MODULE TEST
+# SECTION 6 - ADD APPLIANCE
 # ==========================================================
 
-def test_appliance_energy():
+def add_appliance(
+    appliances,
+    name,
+    quantity,
+    wattage,
+    hours_per_day
+):
     """
-    Basic internal test for the appliance-energy engine.
+    Calculate and append one appliance to an appliance list.
+
+    Returns:
+
+        updated appliance list
     """
 
-    appliances = [
+    if appliances is None:
 
-        create_appliance(
-            name="TV",
-            wattage=100,
-            hours_per_day=5,
-            quantity=1
-        ),
+        appliances = []
 
-        create_appliance(
-            name="Fan",
-            wattage=75,
-            hours_per_day=8,
-            quantity=2
-        )
+    appliance = calculate_appliance_energy(
+        name=name,
+        quantity=quantity,
+        wattage=wattage,
+        hours_per_day=hours_per_day
+    )
 
-    ]
+    appliances.append(
+        appliance
+    )
 
-    summary = create_energy_summary(
+    return appliances
+
+
+# ==========================================================
+# SECTION 7 - REMOVE APPLIANCE
+# ==========================================================
+
+def remove_appliance(
+    appliances,
+    index
+):
+    """
+    Remove an appliance by list index.
+    """
+
+    if not appliances:
+
+        return []
+
+    try:
+
+        index = int(index)
+
+        if 0 <= index < len(appliances):
+
+            appliances.pop(index)
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        pass
+
+    return appliances
+
+
+# ==========================================================
+# SECTION 8 - CALCULATE APPLIANCE CONTRIBUTION
+# ==========================================================
+
+def calculate_appliance_contributions(
+    appliances
+):
+    """
+    Calculate each appliance's percentage contribution
+    to total daily energy consumption.
+    """
+
+    if not appliances:
+
+        return []
+
+    totals = calculate_total_energy(
         appliances
     )
 
-    return summary
+    total_daily_kwh = totals[
+        "total_daily_kwh"
+    ]
+
+    results = []
+
+    for appliance in appliances:
+
+        daily_kwh = safe_float(
+            appliance.get(
+                "daily_kwh",
+                0
+            )
+        )
+
+        if total_daily_kwh > 0:
+
+            contribution = (
+                daily_kwh
+                / total_daily_kwh
+                * 100
+            )
+
+        else:
+
+            contribution = 0.0
+
+        item = dict(
+            appliance
+        )
+
+        item[
+            "contribution_percent"
+        ] = contribution
+
+        results.append(
+            item
+        )
+
+    return results
+
+
+# ==========================================================
+# SECTION 9 - SORT APPLIANCES BY ENERGY
+# ==========================================================
+
+def sort_appliances_by_energy(
+    appliances,
+    descending=True
+):
+    """
+    Sort appliances according to daily energy consumption.
+    """
+
+    if not appliances:
+
+        return []
+
+    return sorted(
+        appliances,
+        key=lambda item: safe_float(
+            item.get(
+                "daily_kwh",
+                0
+            )
+        ),
+        reverse=descending
+    )
+
+
+# ==========================================================
+# SECTION 10 - COMPLETE ENERGY ANALYSIS
+# ==========================================================
+
+def analyze_appliance_energy(
+    appliances
+):
+    """
+    Perform complete appliance-energy analysis.
+
+    Returns a dictionary suitable for:
+
+        Streamlit dashboard
+        charts
+        reports
+        AI recommendations
+        PV sizing
+    """
+
+    if appliances is None:
+
+        appliances = []
+
+    contributions = (
+        calculate_appliance_contributions(
+            appliances
+        )
+    )
+
+    totals = calculate_total_energy(
+        contributions
+    )
+
+    sorted_appliances = (
+        sort_appliances_by_energy(
+            contributions
+        )
+    )
+
+    if sorted_appliances:
+
+        highest_consumer = (
+            sorted_appliances[0]
+        )
+
+    else:
+
+        highest_consumer = None
+
+    return {
+
+        "appliances":
+            contributions,
+
+        "total_daily_wh":
+            totals[
+                "total_daily_wh"
+            ],
+
+        "total_daily_kwh":
+            totals[
+                "total_daily_kwh"
+            ],
+
+        "total_monthly_kwh":
+            totals[
+                "total_monthly_kwh"
+            ],
+
+        "number_of_appliances":
+            len(contributions),
+
+        "highest_consumer":
+            highest_consumer,
+
+        "sorted_appliances":
+            sorted_appliances
+    }
+
+
+# ==========================================================
+# SECTION 11 - DEFAULT APPLIANCE LIBRARY
+# ==========================================================
+
+def get_default_appliances():
+    """
+    Return a copy of the built-in appliance library.
+    """
+
+    return [
+        dict(appliance)
+        for appliance
+        in DEFAULT_APPLIANCES
+    ]
+
+
+# ==========================================================
+# SECTION 12 - FIND DEFAULT APPLIANCE
+# ==========================================================
+
+def get_default_appliance(
+    name
+):
+    """
+    Find a default appliance by name.
+    """
+
+    for appliance in DEFAULT_APPLIANCES:
+
+        if appliance[
+            "name"
+        ].lower() == str(
+            name
+        ).strip().lower():
+
+            return dict(
+                appliance
+            )
+
+    return None
+
+
+# ==========================================================
+# SECTION 13 - PREPARE DATA FOR PV SIZING
+# ==========================================================
+
+def get_daily_energy_demand(
+    appliances
+):
+    """
+    Return total daily energy demand in kWh/day.
+
+    This is the value that can be passed directly into
+    the existing PV sizing calculation.
+    """
+
+    analysis = (
+        analyze_appliance_energy(
+            appliances
+        )
+    )
+
+    return analysis[
+        "total_daily_kwh"
+    ]
+
+
+# ==========================================================
+# SECTION 14 - FORMAT SUMMARY
+# ==========================================================
+
+def format_energy_summary(
+    appliances
+):
+    """
+    Create a simple human-readable energy summary.
+    """
+
+    analysis = (
+        analyze_appliance_energy(
+            appliances
+        )
+    )
+
+    total_daily = analysis[
+        "total_daily_kwh"
+    ]
+
+    total_monthly = analysis[
+        "total_monthly_kwh"
+    ]
+
+    number = analysis[
+        "number_of_appliances"
+    ]
+
+    highest = analysis[
+        "highest_consumer"
+    ]
+
+    if highest:
+
+        highest_name = highest[
+            "name"
+        ]
+
+        highest_energy = highest[
+            "daily_kwh"
+        ]
+
+        highest_text = (
+            f"{highest_name} "
+            f"({highest_energy:.2f} kWh/day)"
+        )
+
+    else:
+
+        highest_text = "None"
+
+    return {
+
+        "total_daily_kwh":
+            total_daily,
+
+        "total_monthly_kwh":
+            total_monthly,
+
+        "number_of_appliances":
+            number,
+
+        "highest_consumer":
+            highest_text
+    }
