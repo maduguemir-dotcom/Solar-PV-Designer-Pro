@@ -2,7 +2,7 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # ==========================================================
 #
-# Appliance Energy Test
+# Appliance Energy Module Test
 # Version: 2.4.0
 #
 # ==========================================================
@@ -10,12 +10,15 @@
 import streamlit as st
 
 from appliance_energy import (
-    create_appliance,
     calculate_appliance_energy,
-    calculate_total_daily_energy,
-    calculate_total_monthly_energy,
-    calculate_total_connected_load,
-    create_energy_summary
+    calculate_total_energy,
+    calculate_appliance_contributions,
+    sort_appliances_by_energy,
+    analyze_appliance_energy,
+    get_daily_energy_demand,
+    get_default_appliances,
+    get_default_appliance,
+    format_energy_summary
 )
 
 
@@ -25,7 +28,7 @@ from appliance_energy import (
 
 st.set_page_config(
     page_title="Appliance Energy Test",
-    page_icon="🔌",
+    page_icon="⚡",
     layout="wide"
 )
 
@@ -35,232 +38,354 @@ st.set_page_config(
 # ==========================================================
 
 st.title(
-    "🔌 Appliance Energy Calculator"
+    "⚡ Appliance Energy Calculator Test"
 )
 
 st.subheader(
-    "Solar PV Designer Pro Africa™ — v2.4"
+    "Solar PV Designer Pro Africa™ v2.4"
 )
 
 st.write(
     """
-    This test demonstrates how appliance wattage,
-    quantity and daily operating hours are converted
-    into electricity demand.
+    This page tests the appliance-energy calculation
+    engine before it is integrated into the main
+    Solar PV Designer Pro dashboard.
     """
 )
 
 
 # ==========================================================
-# TEST APPLIANCES
-# ==========================================================
-
-appliances = [
-
-    create_appliance(
-        name="LED Lights",
-        wattage=20,
-        hours_per_day=6,
-        quantity=5
-    ),
-
-    create_appliance(
-        name="Television",
-        wattage=100,
-        hours_per_day=5,
-        quantity=1
-    ),
-
-    create_appliance(
-        name="Standing Fan",
-        wattage=75,
-        hours_per_day=8,
-        quantity=2
-    ),
-
-    create_appliance(
-        name="Refrigerator",
-        wattage=150,
-        hours_per_day=10,
-        quantity=1
-    ),
-
-    create_appliance(
-        name="Laptop",
-        wattage=65,
-        hours_per_day=6,
-        quantity=1
-    )
-
-]
-
-
-# ==========================================================
-# CALCULATE APPLIANCE RESULTS
-# ==========================================================
-
-rows = []
-
-for appliance in appliances:
-
-    daily_energy = (
-        calculate_appliance_energy(
-            appliance
-        )
-    )
-
-    load = (
-        appliance["wattage"]
-        *
-        appliance["quantity"]
-    )
-
-    rows.append({
-
-        "Appliance":
-            appliance["name"],
-
-        "Quantity":
-            appliance["quantity"],
-
-        "Power (W)":
-            appliance["wattage"],
-
-        "Hours/Day":
-            appliance["hours_per_day"],
-
-        "Connected Load (W)":
-            load,
-
-        "Daily Energy (kWh)":
-            round(
-                daily_energy,
-                3
-            )
-
-    })
-
-
-# ==========================================================
-# DISPLAY TABLE
+# TEST 1 - SINGLE APPLIANCE
 # ==========================================================
 
 st.header(
-    "📋 Appliance Energy Schedule"
+    "1️⃣ Single Appliance Test"
 )
 
-st.dataframe(
-    rows,
-    use_container_width=True,
-    hide_index=True
-)
-
-
-# ==========================================================
-# SUMMARY
-# ==========================================================
-
-summary = create_energy_summary(
-    appliances
-)
-
-
-daily_energy = (
-    summary[
-        "daily_energy_kwh"
-    ]
-)
-
-monthly_energy = (
-    summary[
-        "monthly_energy_kwh"
-    ]
-)
-
-connected_load = (
-    summary[
-        "connected_load_w"
-    ]
-)
-
-
-# ==========================================================
-# METRICS
-# ==========================================================
-
-st.divider()
-
-st.header(
-    "📊 Energy Demand Summary"
+single = calculate_appliance_energy(
+    name="Television",
+    quantity=1,
+    wattage=100,
+    hours_per_day=5
 )
 
 col1, col2, col3 = st.columns(3)
 
-
 col1.metric(
     "Daily Energy",
-    f"{daily_energy:.2f} kWh/day"
+    f"{single['daily_kwh']:.2f} kWh"
 )
 
 col2.metric(
-    "Monthly Energy",
-    f"{monthly_energy:.2f} kWh/month"
+    "Daily Energy",
+    f"{single['daily_wh']:.0f} Wh"
 )
 
 col3.metric(
-    "Connected Load",
-    f"{connected_load:.0f} W"
+    "Monthly Energy",
+    f"{single['monthly_kwh']:.2f} kWh"
+)
+
+st.json(
+    single
 )
 
 
 # ==========================================================
-# ENGINEERING TEST
+# TEST 2 - MULTIPLE APPLIANCES
 # ==========================================================
-
-st.divider()
 
 st.header(
-    "🧪 Test Status"
+    "2️⃣ Multiple Appliance Test"
+)
+
+appliances = []
+
+
+appliances.append(
+    calculate_appliance_energy(
+        name="LED Lights",
+        quantity=10,
+        wattage=10,
+        hours_per_day=6
+    )
 )
 
 
-if daily_energy > 0:
+appliances.append(
+    calculate_appliance_energy(
+        name="Television",
+        quantity=1,
+        wattage=100,
+        hours_per_day=5
+    )
+)
 
-    st.success(
-        "✅ Appliance Energy Module is working correctly."
+
+appliances.append(
+    calculate_appliance_energy(
+        name="Ceiling Fans",
+        quantity=3,
+        wattage=60,
+        hours_per_day=8
+    )
+)
+
+
+appliances.append(
+    calculate_appliance_energy(
+        name="Refrigerator",
+        quantity=1,
+        wattage=150,
+        hours_per_day=10
+    )
+)
+
+
+appliances.append(
+    calculate_appliance_energy(
+        name="Laptop",
+        quantity=2,
+        wattage=65,
+        hours_per_day=6
+    )
+)
+
+
+st.dataframe(
+    appliances,
+    use_container_width=True
+)
+
+
+# ==========================================================
+# TEST 3 - TOTAL ENERGY
+# ==========================================================
+
+st.header(
+    "3️⃣ Total Energy Demand"
+)
+
+totals = calculate_total_energy(
+    appliances
+)
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "Daily Energy",
+    f"{totals['total_daily_kwh']:.2f} kWh/day"
+)
+
+col2.metric(
+    "Daily Energy",
+    f"{totals['total_daily_wh']:.0f} Wh/day"
+)
+
+col3.metric(
+    "Monthly Energy",
+    f"{totals['total_monthly_kwh']:.2f} kWh/month"
+)
+
+
+# ==========================================================
+# TEST 4 - CONTRIBUTIONS
+# ==========================================================
+
+st.header(
+    "4️⃣ Appliance Contribution"
+)
+
+contributions = (
+    calculate_appliance_contributions(
+        appliances
+    )
+)
+
+st.dataframe(
+    contributions,
+    use_container_width=True
+)
+
+
+# ==========================================================
+# TEST 5 - SORTING
+# ==========================================================
+
+st.header(
+    "5️⃣ Appliances Ranked by Energy Consumption"
+)
+
+sorted_appliances = (
+    sort_appliances_by_energy(
+        appliances
+    )
+)
+
+st.dataframe(
+    sorted_appliances,
+    use_container_width=True
+)
+
+
+# ==========================================================
+# TEST 6 - COMPLETE ANALYSIS
+# ==========================================================
+
+st.header(
+    "6️⃣ Complete Energy Analysis"
+)
+
+analysis = analyze_appliance_energy(
+    appliances
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Appliances",
+    analysis[
+        "number_of_appliances"
+    ]
+)
+
+col2.metric(
+    "Daily Demand",
+    f"{analysis['total_daily_kwh']:.2f} kWh"
+)
+
+col3.metric(
+    "Monthly Demand",
+    f"{analysis['total_monthly_kwh']:.2f} kWh"
+)
+
+if analysis[
+    "highest_consumer"
+]:
+
+    col4.metric(
+        "Largest Consumer",
+        analysis[
+            "highest_consumer"
+        ]["name"]
     )
 
 else:
 
-    st.error(
-        "❌ Appliance Energy Module returned zero energy."
+    col4.metric(
+        "Largest Consumer",
+        "None"
     )
 
 
 # ==========================================================
-# FORMULA
+# TEST 7 - PV SIZING INPUT
 # ==========================================================
 
-st.info(
-    """
-    **Energy calculation**
+st.header(
+    "7️⃣ PV Sizing Energy Input"
+)
 
-    Daily Energy (kWh/day) =
-    Wattage × Quantity × Hours per Day ÷ 1000
+daily_demand = get_daily_energy_demand(
+    appliances
+)
+
+st.success(
+    f"""
+    Calculated daily energy demand:
+
+    **{daily_demand:.2f} kWh/day**
+
+    This value can be passed directly to the
+    existing Solar PV sizing engine.
     """
 )
 
 
 # ==========================================================
-# RAW DATA
+# TEST 8 - DEFAULT APPLIANCE LIBRARY
 # ==========================================================
 
-with st.expander(
-    "🔧 View Raw Appliance Data"
-):
+st.header(
+    "8️⃣ Default Appliance Library"
+)
 
-    st.json(
-        appliances
+default_appliances = (
+    get_default_appliances()
+)
+
+st.dataframe(
+    default_appliances,
+    use_container_width=True
+)
+
+
+# ==========================================================
+# TEST 9 - FIND APPLIANCE
+# ==========================================================
+
+st.header(
+    "9️⃣ Appliance Lookup"
+)
+
+selected_appliance = get_default_appliance(
+    "Refrigerator"
+)
+
+if selected_appliance:
+
+    st.success(
+        f"""
+        Refrigerator default wattage:
+
+        **{selected_appliance['default_wattage']} W**
+        """
+    )
+
+else:
+
+    st.warning(
+        "Appliance not found."
+    )
+
+
+# ==========================================================
+# TEST 10 - SUMMARY
+# ==========================================================
+
+st.header(
+    "🔟 Energy Summary"
+)
+
+summary = format_energy_summary(
+    appliances
+)
+
+summary_col1, summary_col2 = st.columns(2)
+
+with summary_col1:
+
+    st.write(
+        f"""
+        **Number of appliances:**
+        {summary['number_of_appliances']}
+
+        **Daily energy demand:**
+        {summary['total_daily_kwh']:.2f} kWh/day
+
+        **Monthly energy demand:**
+        {summary['total_monthly_kwh']:.2f} kWh/month
+        """
+    )
+
+with summary_col2:
+
+    st.write(
+        f"""
+        **Largest energy consumer:**
+
+        {summary['highest_consumer']}
+        """
     )
 
 
@@ -272,9 +397,9 @@ st.divider()
 
 st.caption(
     """
-    Solar PV Designer Pro Africa™ v2.4.0
+    Solar PV Designer Pro Africa™ v2.4
 
-    Appliance Energy Module
+    Appliance Energy Calculation Engine
 
     Developed by:
     Engr. Prof. Ibrahim Sani Madugu
