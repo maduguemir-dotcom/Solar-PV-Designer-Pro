@@ -1,14 +1,7 @@
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
 # Product Library User Interface
-# Version: 2.4.0
-# ==========================================================
-#
-# Purpose:
-# Standalone Streamlit interface for creating and managing
-# a user's solar product library.
-#
-# This module does NOT modify main.py.
+# Version: 2.4.1
 # ==========================================================
 
 import streamlit as st
@@ -30,9 +23,6 @@ from product_engine import (
 # ==========================================================
 
 def initialize_product_library():
-    """
-    Initialize the product library in Streamlit session state.
-    """
 
     if "product_library" not in st.session_state:
 
@@ -50,7 +40,7 @@ def add_product_form():
     st.subheader("➕ Add Product to Library")
 
     with st.form(
-        "add_product_form",
+        "product_library_add_product_form",
         clear_on_submit=True
     ):
 
@@ -60,33 +50,40 @@ def add_product_form():
 
             name = st.text_input(
                 "Product Name",
-                placeholder="e.g. 550W Solar Panel"
+                placeholder="e.g. 550W Solar Panel",
+                key="product_add_name"
             )
 
             category = st.selectbox(
                 "Category",
-                PRODUCT_CATEGORIES
+                PRODUCT_CATEGORIES,
+                key="product_add_category"
             )
 
             manufacturer = st.text_input(
-                "Manufacturer"
+                "Manufacturer",
+                key="product_add_manufacturer"
             )
 
             model = st.text_input(
-                "Model"
+                "Model",
+                key="product_add_model"
             )
 
             technology = st.selectbox(
                 "Technology",
-                PRODUCT_TECHNOLOGIES
+                PRODUCT_TECHNOLOGIES,
+                key="product_add_technology"
             )
 
             supplier = st.text_input(
-                "Supplier"
+                "Supplier",
+                key="product_add_supplier"
             )
 
             country = st.text_input(
-                "Country"
+                "Country",
+                key="product_add_country"
             )
 
         with col2:
@@ -95,28 +92,32 @@ def add_product_form():
                 "Rated Power (W)",
                 min_value=0.0,
                 value=0.0,
-                step=10.0
+                step=10.0,
+                key="product_add_power"
             )
 
             voltage_v = st.number_input(
                 "Voltage (V)",
                 min_value=0.0,
                 value=0.0,
-                step=1.0
+                step=1.0,
+                key="product_add_voltage"
             )
 
             capacity_ah = st.number_input(
                 "Battery Capacity (Ah)",
                 min_value=0.0,
                 value=0.0,
-                step=10.0
+                step=10.0,
+                key="product_add_capacity"
             )
 
             energy_kwh = st.number_input(
                 "Energy Capacity (kWh)",
                 min_value=0.0,
                 value=0.0,
-                step=0.1
+                step=0.1,
+                key="product_add_energy"
             )
 
             efficiency_percent = st.number_input(
@@ -124,22 +125,25 @@ def add_product_form():
                 min_value=0.0,
                 max_value=100.0,
                 value=0.0,
-                step=1.0
+                step=1.0,
+                key="product_add_efficiency"
             )
 
             warranty_years = st.number_input(
                 "Warranty (years)",
                 min_value=0.0,
                 value=0.0,
-                step=1.0
+                step=1.0,
+                key="product_add_warranty"
             )
 
         notes = st.text_area(
             "Notes",
             placeholder=(
-                "Additional technical information, "
-                "supplier notes, installation notes, etc."
-            )
+                "Technical information, supplier notes, "
+                "installation notes, etc."
+            ),
+            key="product_add_notes"
         )
 
         submitted = st.form_submit_button(
@@ -202,7 +206,9 @@ def add_product_form():
 # SECTION 3 - SEARCH AND FILTER
 # ==========================================================
 
-def product_search_interface():
+def product_search_interface(
+    key_prefix="default"
+):
 
     st.subheader("🔎 Search & Filter Product Library")
 
@@ -214,21 +220,24 @@ def product_search_interface():
             "Search",
             placeholder=(
                 "Name, manufacturer, model, supplier..."
-            )
+            ),
+            key=f"{key_prefix}_search"
         )
 
     with col2:
 
         category_filter = st.selectbox(
             "Category Filter",
-            ["All"] + PRODUCT_CATEGORIES
+            ["All"] + PRODUCT_CATEGORIES,
+            key=f"{key_prefix}_category"
         )
 
     with col3:
 
         technology_filter = st.selectbox(
             "Technology Filter",
-            ["All"] + PRODUCT_TECHNOLOGIES
+            ["All"] + PRODUCT_TECHNOLOGIES,
+            key=f"{key_prefix}_technology"
         )
 
     products = (
@@ -263,9 +272,7 @@ def product_search_interface():
 # SECTION 4 - DISPLAY PRODUCTS
 # ==========================================================
 
-def display_product_library(
-    products
-):
+def display_product_library(products):
 
     st.subheader("📚 Product Library")
 
@@ -279,9 +286,7 @@ def display_product_library(
 
     display_data = []
 
-    for index, product in enumerate(
-        products
-    ):
+    for index, product in enumerate(products):
 
         display_data.append({
 
@@ -367,7 +372,7 @@ def display_product_library(
 # SECTION 5 - PRODUCT DETAILS
 # ==========================================================
 
-def product_details(products):
+def product_details(products, key_prefix="details"):
 
     st.subheader("🔍 Product Details")
 
@@ -380,16 +385,20 @@ def product_details(products):
         return
 
     names = [
+
         product.get(
             "name",
             "Unnamed Product"
         )
+
         for product in products
+
     ]
 
     selected_name = st.selectbox(
         "Select Product",
-        names
+        names,
+        key=f"{key_prefix}_product"
     )
 
     selected_product = next(
@@ -400,8 +409,7 @@ def product_details(products):
 
             if product.get(
                 "name"
-            )
-            == selected_name
+            ) == selected_name
         ),
 
         None
@@ -419,7 +427,10 @@ def product_details(products):
 # SECTION 6 - PRODUCT COMPARISON
 # ==========================================================
 
-def product_comparison(products):
+def product_comparison(
+    products,
+    key_prefix="comparison"
+):
 
     st.subheader("⚖️ Compare Products")
 
@@ -449,7 +460,9 @@ def product_comparison(products):
 
         names,
 
-        default=names[:2]
+        default=names[:2],
+
+        key=f"{key_prefix}_products"
 
     )
 
@@ -469,8 +482,7 @@ def product_comparison(products):
 
         if product.get(
             "name"
-        )
-        in selected_names
+        ) in selected_names
 
     ]
 
@@ -528,20 +540,17 @@ def delete_product_interface():
 
     if st.button(
         "🗑️ Remove Selected Product",
-        use_container_width=True
+        use_container_width=True,
+        key="delete_product_button"
     ):
 
-        for index, product in enumerate(
-            products
-        ):
+        for index, product in enumerate(products):
 
             if product.get(
                 "name"
             ) == selected_name:
 
-                products.pop(
-                    index
-                )
+                products.pop(index)
 
                 st.success(
                     f"Removed: {selected_name}"
@@ -560,7 +569,8 @@ def reset_product_library():
 
     if st.button(
         "Reset to Example Products",
-        use_container_width=True
+        use_container_width=True,
+        key="reset_product_library_button"
     ):
 
         st.session_state.product_library = (
@@ -605,39 +615,67 @@ def display_product_library_ui():
 
     ])
 
+    # ------------------------------------------------------
+    # ADD PRODUCT
+    # ------------------------------------------------------
+
     with tab1:
 
         add_product_form()
 
+    # ------------------------------------------------------
+    # LIBRARY
+    # ------------------------------------------------------
+
     with tab2:
 
         filtered_products = (
-            product_search_interface()
+            product_search_interface(
+                key_prefix="library"
+            )
         )
 
         display_product_library(
             filtered_products
         )
 
+    # ------------------------------------------------------
+    # DETAILS
+    # ------------------------------------------------------
+
     with tab3:
 
         filtered_products = (
-            product_search_interface()
+            product_search_interface(
+                key_prefix="details"
+            )
         )
 
         product_details(
-            filtered_products
+            filtered_products,
+            key_prefix="details"
         )
+
+    # ------------------------------------------------------
+    # COMPARISON
+    # ------------------------------------------------------
 
     with tab4:
 
         filtered_products = (
-            product_search_interface()
+            product_search_interface(
+                key_prefix="comparison"
+            )
         )
 
         product_comparison(
-            filtered_products
+            filtered_products,
+            key_prefix="comparison"
         )
+
+    # ------------------------------------------------------
+    # MANAGEMENT
+    # ------------------------------------------------------
 
     with tab5:
 
@@ -653,5 +691,11 @@ def display_product_library_ui():
 # ==========================================================
 
 if __name__ == "__main__":
+
+    st.set_page_config(
+        page_title="Solar Product Library",
+        page_icon="📚",
+        layout="wide"
+    )
 
     display_product_library_ui()
