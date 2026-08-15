@@ -1,7 +1,7 @@
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
 # Persistent Product Library UI
-# Version: 2.4.2
+# Version: 2.4.3
 # ==========================================================
 
 import streamlit as st
@@ -16,49 +16,55 @@ from product_engine import (
     compare_products,
 )
 
-from library_store import (
-    load_product_library,
-    add_product_to_library,
-    remove_product_from_library,
-    save_product_library,
-    backup_library,
+from database import (
+    initialize_database,
+    add_product,
+    get_products,
+    get_product,
+    delete_product,
+    search_products as database_search_products,
+    backup_database,
 )
 
 
 # ==========================================================
-# SECTION 1 - INITIALIZE LIBRARY
+# DATABASE INITIALIZATION
 # ==========================================================
 
-def initialize_product_library():
+def initialize_product_database():
+
+    initialize_database()
 
     if "product_library" not in st.session_state:
 
         st.session_state.product_library = (
-            load_product_library()
+            get_products()
         )
 
 
 # ==========================================================
-# SECTION 2 - REFRESH LIBRARY
+# REFRESH
 # ==========================================================
 
 def refresh_product_library():
 
     st.session_state.product_library = (
-        load_product_library()
+        get_products()
     )
 
 
 # ==========================================================
-# SECTION 3 - ADD PRODUCT
+# ADD PRODUCT
 # ==========================================================
 
 def add_product_form():
 
-    st.subheader("➕ Add Product to Library")
+    st.subheader(
+        "➕ Add Product to Library"
+    )
 
     with st.form(
-        "product_library_add_product_form",
+        "sqlite_product_add_form",
         clear_on_submit=True
     ):
 
@@ -69,39 +75,39 @@ def add_product_form():
             name = st.text_input(
                 "Product Name",
                 placeholder="e.g. 550W Solar Panel",
-                key="product_add_name"
+                key="sqlite_product_name"
             )
 
             category = st.selectbox(
                 "Category",
                 PRODUCT_CATEGORIES,
-                key="product_add_category"
+                key="sqlite_product_category"
             )
 
             manufacturer = st.text_input(
                 "Manufacturer",
-                key="product_add_manufacturer"
+                key="sqlite_product_manufacturer"
             )
 
             model = st.text_input(
                 "Model",
-                key="product_add_model"
+                key="sqlite_product_model"
             )
 
             technology = st.selectbox(
                 "Technology",
                 PRODUCT_TECHNOLOGIES,
-                key="product_add_technology"
+                key="sqlite_product_technology"
             )
 
             supplier = st.text_input(
                 "Supplier",
-                key="product_add_supplier"
+                key="sqlite_product_supplier"
             )
 
             country = st.text_input(
                 "Country",
-                key="product_add_country"
+                key="sqlite_product_country"
             )
 
         with col2:
@@ -111,7 +117,7 @@ def add_product_form():
                 min_value=0.0,
                 value=0.0,
                 step=10.0,
-                key="product_add_power"
+                key="sqlite_product_power"
             )
 
             voltage_v = st.number_input(
@@ -119,7 +125,7 @@ def add_product_form():
                 min_value=0.0,
                 value=0.0,
                 step=1.0,
-                key="product_add_voltage"
+                key="sqlite_product_voltage"
             )
 
             capacity_ah = st.number_input(
@@ -127,7 +133,7 @@ def add_product_form():
                 min_value=0.0,
                 value=0.0,
                 step=10.0,
-                key="product_add_capacity"
+                key="sqlite_product_capacity"
             )
 
             energy_kwh = st.number_input(
@@ -135,7 +141,7 @@ def add_product_form():
                 min_value=0.0,
                 value=0.0,
                 step=0.1,
-                key="product_add_energy"
+                key="sqlite_product_energy"
             )
 
             efficiency_percent = st.number_input(
@@ -144,7 +150,7 @@ def add_product_form():
                 max_value=100.0,
                 value=0.0,
                 step=1.0,
-                key="product_add_efficiency"
+                key="sqlite_product_efficiency"
             )
 
             warranty_years = st.number_input(
@@ -152,7 +158,7 @@ def add_product_form():
                 min_value=0.0,
                 value=0.0,
                 step=1.0,
-                key="product_add_warranty"
+                key="sqlite_product_warranty"
             )
 
         notes = st.text_area(
@@ -161,7 +167,7 @@ def add_product_form():
                 "Technical information, supplier notes, "
                 "installation notes, etc."
             ),
-            key="product_add_notes"
+            key="sqlite_product_notes"
         )
 
         submitted = st.form_submit_button(
@@ -169,78 +175,102 @@ def add_product_form():
             use_container_width=True
         )
 
-    if submitted:
+    if not submitted:
 
-        if not name.strip():
+        return
 
-            st.error(
-                "Product name is required."
-            )
+    if not name.strip():
 
-            return
-
-        result = create_product(
-
-            name=name,
-
-            category=category,
-
-            manufacturer=manufacturer,
-
-            model=model,
-
-            technology=technology,
-
-            rated_power_w=rated_power_w,
-
-            voltage_v=voltage_v,
-
-            capacity_ah=capacity_ah,
-
-            energy_kwh=energy_kwh,
-
-            efficiency_percent=efficiency_percent,
-
-            warranty_years=warranty_years,
-
-            supplier=supplier,
-
-            country=country,
-
-            notes=notes,
-
+        st.error(
+            "Product name is required."
         )
 
-        if not result["success"]:
+        return
 
-            st.error(
-                result["message"]
-            )
+    product = {
 
-            return
+        "name":
+            name,
 
-        save_result = add_product_to_library(
-            result["product"]
+        "category":
+            category,
+
+        "manufacturer":
+            manufacturer,
+
+        "model":
+            model,
+
+        "technology":
+            technology,
+
+        "rated_power_w":
+            rated_power_w,
+
+        "voltage_v":
+            voltage_v,
+
+        "capacity_ah":
+            capacity_ah,
+
+        "energy_kwh":
+            energy_kwh,
+
+        "efficiency_percent":
+            efficiency_percent,
+
+        "warranty_years":
+            warranty_years,
+
+        "supplier":
+            supplier,
+
+        "country":
+            country,
+
+        "notes":
+            notes,
+
+    }
+
+    # Validate through product engine first
+
+    validation = create_product(
+        **product
+    )
+
+    if not validation["success"]:
+
+        st.error(
+            validation["message"]
         )
 
-        if save_result["success"]:
+        return
 
-            refresh_product_library()
+    # Save directly to SQLite
 
-            st.success(
-                f"✅ {name} saved permanently "
-                "to the product library."
-            )
+    try:
 
-        else:
+        product_id = add_product(
+            product
+        )
 
-            st.error(
-                save_result["message"]
-            )
+        refresh_product_library()
+
+        st.success(
+            f"✅ Product saved successfully "
+            f"(Database ID: {product_id})."
+        )
+
+    except Exception as error:
+
+        st.error(
+            f"Unable to save product: {error}"
+        )
 
 
 # ==========================================================
-# SECTION 4 - SEARCH AND FILTER
+# SEARCH AND FILTER
 # ==========================================================
 
 def product_search_interface(
@@ -260,7 +290,7 @@ def product_search_interface(
             placeholder=(
                 "Name, manufacturer, model, supplier..."
             ),
-            key=f"{key_prefix}_search"
+            key=f"{key_prefix}_sqlite_search"
         )
 
     with col2:
@@ -268,7 +298,7 @@ def product_search_interface(
         category_filter = st.selectbox(
             "Category Filter",
             ["All"] + PRODUCT_CATEGORIES,
-            key=f"{key_prefix}_category"
+            key=f"{key_prefix}_sqlite_category"
         )
 
     with col3:
@@ -276,19 +306,22 @@ def product_search_interface(
         technology_filter = st.selectbox(
             "Technology Filter",
             ["All"] + PRODUCT_TECHNOLOGIES,
-            key=f"{key_prefix}_technology"
+            key=f"{key_prefix}_sqlite_technology"
         )
 
     products = list(
         st.session_state.product_library
     )
 
+    # Database search
+
     if search_query:
 
-        products = search_products(
-            products,
+        products = database_search_products(
             search_query
         )
+
+    # Engine filters
 
     if category_filter != "All":
 
@@ -308,7 +341,7 @@ def product_search_interface(
 
 
 # ==========================================================
-# SECTION 5 - DISPLAY LIBRARY
+# DISPLAY LIBRARY
 # ==========================================================
 
 def display_product_library(
@@ -329,14 +362,15 @@ def display_product_library(
 
     display_data = []
 
-    for index, product in enumerate(
-        products
-    ):
+    for product in products:
 
         display_data.append({
 
             "ID":
-                index,
+                product.get(
+                    "id",
+                    ""
+                ),
 
             "Product":
                 product.get(
@@ -426,7 +460,7 @@ def display_product_library(
 
 
 # ==========================================================
-# SECTION 6 - PRODUCT DETAILS
+# PRODUCT DETAILS
 # ==========================================================
 
 def product_details(
@@ -446,36 +480,40 @@ def product_details(
 
         return
 
-    names = [
+    labels = []
 
-        product.get(
+    product_map = {}
+
+    for product in products:
+
+        product_id = product.get(
+            "id"
+        )
+
+        name = product.get(
             "name",
             "Unnamed Product"
         )
 
-        for product in products
+        label = (
+            f"{name} "
+            f"(ID: {product_id})"
+        )
 
-    ]
+        labels.append(
+            label
+        )
 
-    selected_name = st.selectbox(
+        product_map[label] = product
+
+    selected_label = st.selectbox(
         "Select Product",
-        names,
-        key=f"{key_prefix}_product"
+        labels,
+        key=f"{key_prefix}_sqlite_product"
     )
 
-    selected_product = next(
-
-        (
-            product
-            for product in products
-
-            if product.get(
-                "name"
-            ) == selected_name
-        ),
-
-        None
-
+    selected_product = product_map.get(
+        selected_label
     )
 
     if selected_product:
@@ -486,7 +524,7 @@ def product_details(
 
 
 # ==========================================================
-# SECTION 7 - PRODUCT COMPARISON
+# PRODUCT COMPARISON
 # ==========================================================
 
 def product_comparison(
@@ -507,30 +545,45 @@ def product_comparison(
 
         return
 
-    names = [
+    labels = []
 
-        product.get(
+    product_map = {}
+
+    for product in products:
+
+        product_id = product.get(
+            "id"
+        )
+
+        name = product.get(
             "name",
             "Unnamed Product"
         )
 
-        for product in products
+        label = (
+            f"{name} "
+            f"(ID: {product_id})"
+        )
 
-    ]
+        labels.append(
+            label
+        )
 
-    selected_names = st.multiselect(
+        product_map[label] = product
+
+    selected_labels = st.multiselect(
 
         "Select products to compare",
 
-        names,
+        labels,
 
-        default=names[:2],
+        default=labels[:2],
 
-        key=f"{key_prefix}_products"
+        key=f"{key_prefix}_sqlite_products"
 
     )
 
-    if len(selected_names) < 2:
+    if len(selected_labels) < 2:
 
         st.info(
             "Select at least two products."
@@ -540,13 +593,9 @@ def product_comparison(
 
     selected_products = [
 
-        product
+        product_map[label]
 
-        for product in products
-
-        if product.get(
-            "name"
-        ) in selected_names
+        for label in selected_labels
 
     ]
 
@@ -562,7 +611,7 @@ def product_comparison(
 
 
 # ==========================================================
-# SECTION 8 - DELETE PRODUCT
+# DELETE PRODUCT
 # ==========================================================
 
 def delete_product_interface():
@@ -583,25 +632,52 @@ def delete_product_interface():
 
         return
 
-    product_names = [
+    labels = []
 
-        product.get(
+    product_map = {}
+
+    for product in products:
+
+        product_id = product.get(
+            "id"
+        )
+
+        name = product.get(
             "name",
             "Unnamed Product"
         )
 
-        for product in products
+        label = (
+            f"{name} "
+            f"(ID: {product_id})"
+        )
 
-    ]
+        labels.append(
+            label
+        )
 
-    selected_name = st.selectbox(
+        product_map[label] = product
+
+    selected_label = st.selectbox(
 
         "Select product to remove",
 
-        product_names,
+        labels,
 
-        key="delete_product_selector"
+        key="sqlite_delete_product_selector"
 
+    )
+
+    selected_product = product_map.get(
+        selected_label
+    )
+
+    if not selected_product:
+
+        return
+
+    product_id = selected_product.get(
+        "id"
     )
 
     if st.button(
@@ -610,61 +686,47 @@ def delete_product_interface():
 
         use_container_width=True,
 
-        key="delete_product_button"
+        key="sqlite_delete_product_button"
 
     ):
 
-        selected_index = None
+        try:
 
-        for index, product in enumerate(
-            products
-        ):
-
-            if product.get(
-                "name"
-            ) == selected_name:
-
-                selected_index = index
-
-                break
-
-        if selected_index is None:
-
-            st.error(
-                "Product could not be found."
+            deleted = delete_product(
+                product_id
             )
 
-            return
+            if deleted:
 
-        result = remove_product_from_library(
-            selected_index
-        )
+                refresh_product_library()
 
-        if result["success"]:
+                st.success(
+                    "Product removed successfully."
+                )
 
-            refresh_product_library()
+                st.rerun()
 
-            st.success(
-                f"Removed: {selected_name}"
-            )
+            else:
 
-            st.rerun()
+                st.error(
+                    "Product could not be removed."
+                )
 
-        else:
+        except Exception as error:
 
             st.error(
-                result["message"]
+                f"Delete operation failed: {error}"
             )
 
 
 # ==========================================================
-# SECTION 9 - LIBRARY MANAGEMENT
+# DATABASE MANAGEMENT
 # ==========================================================
 
-def library_management():
+def database_management():
 
     st.subheader(
-        "⚙️ Library Management"
+        "⚙️ Database Management"
     )
 
     col1, col2 = st.columns(2)
@@ -672,15 +734,19 @@ def library_management():
     with col1:
 
         if st.button(
-            "🔄 Refresh Library",
+
+            "🔄 Refresh Database",
+
             use_container_width=True,
-            key="refresh_product_library_button"
+
+            key="sqlite_refresh_button"
+
         ):
 
             refresh_product_library()
 
             st.success(
-                "Product library refreshed."
+                "Product database refreshed."
             )
 
             st.rerun()
@@ -688,52 +754,57 @@ def library_management():
     with col2:
 
         if st.button(
-            "📦 Create Backup",
+
+            "📦 Backup Database",
+
             use_container_width=True,
-            key="product_library_backup_button"
+
+            key="sqlite_backup_button"
+
         ):
 
-            result = backup_library()
+            result = backup_database()
 
             if result["success"]:
 
                 st.success(
-                    "Product and service libraries "
-                    "backed up successfully."
+                    "SQLite database backed up successfully."
                 )
 
-                st.json(
-                    result
+                st.code(
+                    result["file"]
                 )
 
             else:
 
                 st.error(
-                    "Backup failed."
+                    result.get(
+                        "message",
+                        "Backup failed."
+                    )
                 )
 
 
 # ==========================================================
-# SECTION 10 - MAIN PRODUCT UI
+# MAIN PRODUCT UI
 # ==========================================================
 
 def display_product_library_ui():
 
-    initialize_product_library()
+    initialize_product_database()
 
     st.header(
         "📚 Solar Product Library"
     )
 
     st.caption(
-        "Build and manage your persistent local "
-        "solar equipment database."
+        "Persistent solar equipment database "
+        "for Solar PV Designer Pro Africa™"
     )
 
-    st.info(
-        "Products saved here are stored in the "
-        "application data library and are not lost "
-        "when the Streamlit session restarts."
+    st.success(
+        "Products are stored in the SQLite database "
+        "and persist between application sessions."
     )
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -750,47 +821,61 @@ def display_product_library_ui():
 
     ])
 
+    # ------------------------------------------------------
+    # ADD
+    # ------------------------------------------------------
+
     with tab1:
 
         add_product_form()
 
+    # ------------------------------------------------------
+    # LIBRARY
+    # ------------------------------------------------------
+
     with tab2:
 
-        filtered_products = (
-            product_search_interface(
-                key_prefix="library"
-            )
+        products = product_search_interface(
+            key_prefix="library"
         )
 
         display_product_library(
-            filtered_products
+            products
         )
+
+    # ------------------------------------------------------
+    # DETAILS
+    # ------------------------------------------------------
 
     with tab3:
 
-        filtered_products = (
-            product_search_interface(
-                key_prefix="details"
-            )
-        )
-
-        product_details(
-            filtered_products,
+        products = product_search_interface(
             key_prefix="details"
         )
 
+        product_details(
+            products,
+            key_prefix="details"
+        )
+
+    # ------------------------------------------------------
+    # COMPARE
+    # ------------------------------------------------------
+
     with tab4:
 
-        filtered_products = (
-            product_search_interface(
-                key_prefix="comparison"
-            )
+        products = product_search_interface(
+            key_prefix="comparison"
         )
 
         product_comparison(
-            filtered_products,
+            products,
             key_prefix="comparison"
         )
+
+    # ------------------------------------------------------
+    # MANAGE
+    # ------------------------------------------------------
 
     with tab5:
 
@@ -798,7 +883,7 @@ def display_product_library_ui():
 
         st.divider()
 
-        library_management()
+        database_management()
 
 
 # ==========================================================
@@ -808,9 +893,16 @@ def display_product_library_ui():
 if __name__ == "__main__":
 
     st.set_page_config(
-        page_title="Solar Product Library",
-        page_icon="📚",
-        layout="wide"
+
+        page_title=
+            "Solar Product Library",
+
+        page_icon=
+            "📚",
+
+        layout=
+            "wide"
+
     )
 
     display_product_library_ui()
