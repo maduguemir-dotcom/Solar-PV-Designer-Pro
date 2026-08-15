@@ -1,7 +1,7 @@
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
-# Product Library User Interface
-# Version: 2.4.1
+# Persistent Product Library UI
+# Version: 2.4.2
 # ==========================================================
 
 import streamlit as st
@@ -9,7 +9,6 @@ import streamlit as st
 from product_engine import (
     PRODUCT_CATEGORIES,
     PRODUCT_TECHNOLOGIES,
-    get_default_products,
     create_product,
     search_products,
     filter_products_by_category,
@@ -17,9 +16,17 @@ from product_engine import (
     compare_products,
 )
 
+from library_store import (
+    load_product_library,
+    add_product_to_library,
+    remove_product_from_library,
+    save_product_library,
+    backup_library,
+)
+
 
 # ==========================================================
-# SECTION 1 - SESSION STATE
+# SECTION 1 - INITIALIZE LIBRARY
 # ==========================================================
 
 def initialize_product_library():
@@ -27,12 +34,23 @@ def initialize_product_library():
     if "product_library" not in st.session_state:
 
         st.session_state.product_library = (
-            get_default_products()
+            load_product_library()
         )
 
 
 # ==========================================================
-# SECTION 2 - ADD PRODUCT
+# SECTION 2 - REFRESH LIBRARY
+# ==========================================================
+
+def refresh_product_library():
+
+    st.session_state.product_library = (
+        load_product_library()
+    )
+
+
+# ==========================================================
+# SECTION 3 - ADD PRODUCT
 # ==========================================================
 
 def add_product_form():
@@ -153,6 +171,14 @@ def add_product_form():
 
     if submitted:
 
+        if not name.strip():
+
+            st.error(
+                "Product name is required."
+            )
+
+            return
+
         result = create_product(
 
             name=name,
@@ -185,32 +211,45 @@ def add_product_form():
 
         )
 
-        if result["success"]:
-
-            st.session_state.product_library.append(
-                result["product"]
-            )
-
-            st.success(
-                f"✅ {name} added to the product library."
-            )
-
-        else:
+        if not result["success"]:
 
             st.error(
                 result["message"]
             )
 
+            return
+
+        save_result = add_product_to_library(
+            result["product"]
+        )
+
+        if save_result["success"]:
+
+            refresh_product_library()
+
+            st.success(
+                f"✅ {name} saved permanently "
+                "to the product library."
+            )
+
+        else:
+
+            st.error(
+                save_result["message"]
+            )
+
 
 # ==========================================================
-# SECTION 3 - SEARCH AND FILTER
+# SECTION 4 - SEARCH AND FILTER
 # ==========================================================
 
 def product_search_interface(
     key_prefix="default"
 ):
 
-    st.subheader("🔎 Search & Filter Product Library")
+    st.subheader(
+        "🔎 Search & Filter Product Library"
+    )
 
     col1, col2, col3 = st.columns(3)
 
@@ -240,7 +279,7 @@ def product_search_interface(
             key=f"{key_prefix}_technology"
         )
 
-    products = (
+    products = list(
         st.session_state.product_library
     )
 
@@ -269,12 +308,16 @@ def product_search_interface(
 
 
 # ==========================================================
-# SECTION 4 - DISPLAY PRODUCTS
+# SECTION 5 - DISPLAY LIBRARY
 # ==========================================================
 
-def display_product_library(products):
+def display_product_library(
+    products
+):
 
-    st.subheader("📚 Product Library")
+    st.subheader(
+        "📚 Product Library"
+    )
 
     if not products:
 
@@ -286,7 +329,9 @@ def display_product_library(products):
 
     display_data = []
 
-    for index, product in enumerate(products):
+    for index, product in enumerate(
+        products
+    ):
 
         display_data.append({
 
@@ -359,6 +404,18 @@ def display_product_library(products):
                     0
                 ),
 
+            "Supplier":
+                product.get(
+                    "supplier",
+                    ""
+                ),
+
+            "Country":
+                product.get(
+                    "country",
+                    ""
+                ),
+
         })
 
     st.dataframe(
@@ -369,12 +426,17 @@ def display_product_library(products):
 
 
 # ==========================================================
-# SECTION 5 - PRODUCT DETAILS
+# SECTION 6 - PRODUCT DETAILS
 # ==========================================================
 
-def product_details(products, key_prefix="details"):
+def product_details(
+    products,
+    key_prefix="details"
+):
 
-    st.subheader("🔍 Product Details")
+    st.subheader(
+        "🔍 Product Details"
+    )
 
     if not products:
 
@@ -424,7 +486,7 @@ def product_details(products, key_prefix="details"):
 
 
 # ==========================================================
-# SECTION 6 - PRODUCT COMPARISON
+# SECTION 7 - PRODUCT COMPARISON
 # ==========================================================
 
 def product_comparison(
@@ -432,7 +494,9 @@ def product_comparison(
     key_prefix="comparison"
 ):
 
-    st.subheader("⚖️ Compare Products")
+    st.subheader(
+        "⚖️ Compare Products"
+    )
 
     if len(products) < 2:
 
@@ -498,12 +562,14 @@ def product_comparison(
 
 
 # ==========================================================
-# SECTION 7 - DELETE PRODUCT
+# SECTION 8 - DELETE PRODUCT
 # ==========================================================
 
 def delete_product_interface():
 
-    st.subheader("🗑️ Remove Product")
+    st.subheader(
+        "🗑️ Remove Product"
+    )
 
     products = (
         st.session_state.product_library
@@ -539,53 +605,116 @@ def delete_product_interface():
     )
 
     if st.button(
+
         "🗑️ Remove Selected Product",
+
         use_container_width=True,
+
         key="delete_product_button"
+
     ):
 
-        for index, product in enumerate(products):
+        selected_index = None
+
+        for index, product in enumerate(
+            products
+        ):
 
             if product.get(
                 "name"
             ) == selected_name:
 
-                products.pop(index)
+                selected_index = index
+
+                break
+
+        if selected_index is None:
+
+            st.error(
+                "Product could not be found."
+            )
+
+            return
+
+        result = remove_product_from_library(
+            selected_index
+        )
+
+        if result["success"]:
+
+            refresh_product_library()
+
+            st.success(
+                f"Removed: {selected_name}"
+            )
+
+            st.rerun()
+
+        else:
+
+            st.error(
+                result["message"]
+            )
+
+
+# ==========================================================
+# SECTION 9 - LIBRARY MANAGEMENT
+# ==========================================================
+
+def library_management():
+
+    st.subheader(
+        "⚙️ Library Management"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        if st.button(
+            "🔄 Refresh Library",
+            use_container_width=True,
+            key="refresh_product_library_button"
+        ):
+
+            refresh_product_library()
+
+            st.success(
+                "Product library refreshed."
+            )
+
+            st.rerun()
+
+    with col2:
+
+        if st.button(
+            "📦 Create Backup",
+            use_container_width=True,
+            key="product_library_backup_button"
+        ):
+
+            result = backup_library()
+
+            if result["success"]:
 
                 st.success(
-                    f"Removed: {selected_name}"
+                    "Product and service libraries "
+                    "backed up successfully."
                 )
 
-                st.rerun()
+                st.json(
+                    result
+                )
+
+            else:
+
+                st.error(
+                    "Backup failed."
+                )
 
 
 # ==========================================================
-# SECTION 8 - RESET LIBRARY
-# ==========================================================
-
-def reset_product_library():
-
-    st.subheader("♻️ Library Management")
-
-    if st.button(
-        "Reset to Example Products",
-        use_container_width=True,
-        key="reset_product_library_button"
-    ):
-
-        st.session_state.product_library = (
-            get_default_products()
-        )
-
-        st.success(
-            "Product library reset successfully."
-        )
-
-        st.rerun()
-
-
-# ==========================================================
-# SECTION 9 - MAIN PRODUCT UI
+# SECTION 10 - MAIN PRODUCT UI
 # ==========================================================
 
 def display_product_library_ui():
@@ -597,8 +726,14 @@ def display_product_library_ui():
     )
 
     st.caption(
-        "Create, manage, search and compare "
-        "your own solar equipment database."
+        "Build and manage your persistent local "
+        "solar equipment database."
+    )
+
+    st.info(
+        "Products saved here are stored in the "
+        "application data library and are not lost "
+        "when the Streamlit session restarts."
     )
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -615,17 +750,9 @@ def display_product_library_ui():
 
     ])
 
-    # ------------------------------------------------------
-    # ADD PRODUCT
-    # ------------------------------------------------------
-
     with tab1:
 
         add_product_form()
-
-    # ------------------------------------------------------
-    # LIBRARY
-    # ------------------------------------------------------
 
     with tab2:
 
@@ -638,10 +765,6 @@ def display_product_library_ui():
         display_product_library(
             filtered_products
         )
-
-    # ------------------------------------------------------
-    # DETAILS
-    # ------------------------------------------------------
 
     with tab3:
 
@@ -656,10 +779,6 @@ def display_product_library_ui():
             key_prefix="details"
         )
 
-    # ------------------------------------------------------
-    # COMPARISON
-    # ------------------------------------------------------
-
     with tab4:
 
         filtered_products = (
@@ -673,17 +792,13 @@ def display_product_library_ui():
             key_prefix="comparison"
         )
 
-    # ------------------------------------------------------
-    # MANAGEMENT
-    # ------------------------------------------------------
-
     with tab5:
 
         delete_product_interface()
 
         st.divider()
 
-        reset_product_library()
+        library_management()
 
 
 # ==========================================================
