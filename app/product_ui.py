@@ -761,121 +761,742 @@ def product_search_interface(
 # DISPLAY LIBRARY
 # ==========================================================
 
-def display_product_library(
-    products
-):
+def display_product_library():
 
-    st.subheader(
-        "📚 Product Library"
+    from product_schema import (
+        get_category_icon,
     )
 
+    st.subheader("📚 Product Library")
+
+    # ======================================================
+    # LOAD PRODUCTS
+    # ======================================================
+
+    try:
+        products = get_products()
+    except Exception as error:
+        st.error(f"Unable to load product library: {error}")
+        return
+
     if not products:
+        st.info(
+            "No products are currently stored in the library."
+        )
+        return
+
+    # ======================================================
+    # CATEGORY SUMMARY
+    # ======================================================
+
+    categories = sorted(
+        set(
+            product.get(
+                "category",
+                "Other"
+            )
+            for product in products
+        )
+    )
+
+    st.markdown("### 📂 Browse by Category")
+
+    # "All Products" + categories
+    library_options = ["🌐 All Products"]
+
+    for category in categories:
+
+        icon = get_category_icon(category)
+
+        library_options.append(
+            f"{icon} {category}"
+        )
+
+    selected_library = st.radio(
+        "Library category",
+        library_options,
+        horizontal=True,
+        key="product_library_category"
+    )
+
+    # ======================================================
+    # FILTER
+    # ======================================================
+
+    if selected_library == "🌐 All Products":
+
+        filtered_products = products
+
+        selected_category = None
+
+    else:
+
+        selected_category = selected_library.split(
+            " ",
+            1
+        )[1]
+
+        filtered_products = [
+
+            product
+
+            for product in products
+
+            if product.get(
+                "category",
+                "Other"
+            ) == selected_category
+
+        ]
+
+    # ======================================================
+    # CATEGORY HEADER
+    # ======================================================
+
+    if selected_category:
+
+        icon = get_category_icon(
+            selected_category
+        )
+
+        st.markdown(
+            f"## {icon} {selected_category}"
+        )
+
+    else:
+
+        st.markdown(
+            "## 🌐 All Products"
+        )
+
+    st.caption(
+        f"{len(filtered_products)} "
+        f"product(s) in this library."
+    )
+
+    # ======================================================
+    # EMPTY CATEGORY
+    # ======================================================
+
+    if not filtered_products:
 
         st.info(
-            "No products found."
+            "There are no products in this category yet."
         )
 
         return
 
-    display_data = []
+    # ======================================================
+    # CATEGORY-SPECIFIC DISPLAY
+    # ======================================================
 
-    for product in products:
+    if selected_category == "Solar Panel":
 
-        display_data.append({
+        _display_solar_panel_library(
+            filtered_products
+        )
 
-            "ID":
-                product.get(
-                    "id",
+    elif selected_category == "Battery":
+
+        _display_battery_library(
+            filtered_products
+        )
+
+    elif selected_category == "Inverter":
+
+        _display_inverter_library(
+            filtered_products
+        )
+
+    elif selected_category == "Charge Controller":
+
+        _display_charge_controller_library(
+            filtered_products
+        )
+
+    elif selected_category == "Mounting Structure":
+
+        _display_mounting_library(
+            filtered_products
+        )
+
+    elif selected_category == "Solar Cable":
+
+        _display_cable_library(
+            filtered_products
+        )
+
+    elif selected_category == "Protection":
+
+        _display_protection_library(
+            filtered_products
+        )
+
+    else:
+
+        _display_general_product_library(
+            filtered_products
+        )
+def _display_solar_panel_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Technology":
+                p.get("technology", ""),
+
+            "Power (W)":
+                specs.get(
+                    "rated_power_w",
+                    p.get("rated_power_w", 0)
+                ),
+
+            "Voc (V)":
+                specs.get(
+                    "voc_v",
                     ""
                 ),
 
-            "Product":
-                product.get(
-                    "name",
-                    "N/A"
+            "Vmp (V)":
+                specs.get(
+                    "vmp_v",
+                    ""
                 ),
 
-            "Category":
-                product.get(
-                    "category",
-                    "N/A"
+            "Isc (A)":
+                specs.get(
+                    "isc_a",
+                    ""
                 ),
 
-            "Manufacturer":
-                product.get(
-                    "manufacturer",
-                    "N/A"
-                ),
-
-            "Model":
-                product.get(
-                    "model",
-                    "N/A"
-                ),
-
-            "Technology":
-                product.get(
-                    "technology",
-                    "N/A"
-                ),
-
-            "Power (W)":
-                product.get(
-                    "rated_power_w",
-                    0
-                ),
-
-            "Voltage (V)":
-                product.get(
-                    "voltage_v",
-                    0
-                ),
-
-            "Capacity (Ah)":
-                product.get(
-                    "capacity_ah",
-                    0
-                ),
-
-            "Energy (kWh)":
-                product.get(
-                    "energy_kwh",
-                    0
+            "Imp (A)":
+                specs.get(
+                    "imp_a",
+                    ""
                 ),
 
             "Efficiency (%)":
-                product.get(
+                specs.get(
                     "efficiency_percent",
-                    0
+                    p.get(
+                        "efficiency_percent",
+                        ""
+                    )
                 ),
 
-            "Warranty (years)":
-                product.get(
-                    "warranty_years",
-                    0
-                ),
+            "Price":
+                p.get("price", ""),
 
-            "Supplier":
-                product.get(
-                    "supplier",
-                    ""
-                ),
-
-            "Country":
-                product.get(
-                    "country",
-                    ""
-                ),
+            "Currency":
+                p.get("currency", "")
 
         })
 
     st.dataframe(
-        display_data,
+        rows,
         use_container_width=True,
         hide_index=True
     )
 
 
+def _display_battery_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Technology":
+                p.get("technology", ""),
+
+            "Voltage (V)":
+                specs.get(
+                    "nominal_voltage_v",
+                    p.get("voltage_v", "")
+                ),
+
+            "Capacity (Ah)":
+                specs.get(
+                    "capacity_ah",
+                    p.get("capacity_ah", "")
+                ),
+
+            "Energy (kWh)":
+                specs.get(
+                    "energy_kwh",
+                    p.get("energy_kwh", "")
+                ),
+
+            "DoD (%)":
+                specs.get(
+                    "depth_of_discharge_percent",
+                    ""
+                ),
+
+            "Efficiency (%)":
+                specs.get(
+                    "round_trip_efficiency_percent",
+                    p.get(
+                        "efficiency_percent",
+                        ""
+                    )
+                ),
+
+            "Cycle Life":
+                specs.get(
+                    "cycle_life",
+                    ""
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_inverter_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Technology":
+                p.get("technology", ""),
+
+            "Power (W)":
+                specs.get(
+                    "rated_power_w",
+                    p.get("rated_power_w", "")
+                ),
+
+            "Surge (W)":
+                specs.get(
+                    "surge_power_w",
+                    ""
+                ),
+
+            "DC Voltage (V)":
+                specs.get(
+                    "dc_nominal_voltage_v",
+                    p.get("voltage_v", "")
+                ),
+
+            "AC Voltage (V)":
+                specs.get(
+                    "ac_output_voltage_v",
+                    ""
+                ),
+
+            "MPPT Range":
+                (
+                    f"{specs.get('mppt_min_voltage_v', '')}"
+                    f" – "
+                    f"{specs.get('mppt_max_voltage_v', '')}"
+                ),
+
+            "Efficiency (%)":
+                specs.get(
+                    "efficiency_percent",
+                    p.get(
+                        "efficiency_percent",
+                        ""
+                    )
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_charge_controller_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Type":
+                specs.get(
+                    "controller_type",
+                    p.get("technology", "")
+                ),
+
+            "System Voltage":
+                specs.get(
+                    "system_voltage_v",
+                    ""
+                ),
+
+            "Charge Current (A)":
+                specs.get(
+                    "max_charge_current_a",
+                    ""
+                ),
+
+            "PV Input (W)":
+                specs.get(
+                    "max_pv_input_power_w",
+                    ""
+                ),
+
+            "PV Voltage (V)":
+                specs.get(
+                    "max_pv_voltage_v",
+                    ""
+                ),
+
+            "Efficiency (%)":
+                specs.get(
+                    "efficiency_percent",
+                    ""
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_mounting_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Structure":
+                specs.get(
+                    "structure_type",
+                    ""
+                ),
+
+            "Material":
+                specs.get(
+                    "material",
+                    ""
+                ),
+
+            "Panel Capacity":
+                specs.get(
+                    "panel_capacity",
+                    ""
+                ),
+
+            "Roof Type":
+                specs.get(
+                    "roof_type",
+                    ""
+                ),
+
+            "Wind Rating":
+                specs.get(
+                    "wind_rating_kmh",
+                    ""
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_cable_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Cross Section (mm²)":
+                specs.get(
+                    "cross_section_mm2",
+                    ""
+                ),
+
+            "Material":
+                specs.get(
+                    "conductor_material",
+                    ""
+                ),
+
+            "Length (m)":
+                specs.get(
+                    "cable_length_m",
+                    ""
+                ),
+
+            "Voltage Rating":
+                specs.get(
+                    "voltage_rating_v",
+                    ""
+                ),
+
+            "UV Resistant":
+                specs.get(
+                    "uv_resistant",
+                    ""
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_protection_library(products):
+
+    rows = []
+
+    for p in products:
+
+        specs = p.get(
+            "specifications",
+            {}
+        )
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Type":
+                specs.get(
+                    "protection_type",
+                    ""
+                ),
+
+            "Voltage (V)":
+                specs.get(
+                    "rated_voltage_v",
+                    ""
+                ),
+
+            "Current (A)":
+                specs.get(
+                    "rated_current_a",
+                    ""
+                ),
+
+            "Poles":
+                specs.get(
+                    "poles",
+                    ""
+                ),
+
+            "Breaking Capacity (kA)":
+                specs.get(
+                    "breaking_capacity_ka",
+                    ""
+                ),
+
+            "Application":
+                specs.get(
+                    "dc_or_ac",
+                    ""
+                ),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def _display_general_product_library(products):
+
+    rows = []
+
+    for p in products:
+
+        rows.append({
+
+            "Product":
+                p.get("name", ""),
+
+            "Category":
+                p.get("category", ""),
+
+            "Manufacturer":
+                p.get("manufacturer", ""),
+
+            "Model":
+                p.get("model", ""),
+
+            "Technology":
+                p.get("technology", ""),
+
+            "Supplier":
+                p.get("supplier", ""),
+
+            "Country":
+                p.get("country", ""),
+
+            "Price":
+                p.get("price", ""),
+
+            "Currency":
+                p.get("currency", "")
+
+        })
+
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True
+    )
 # ==========================================================
 # PRODUCT DETAILS
 # ==========================================================
