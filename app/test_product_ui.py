@@ -2,12 +2,11 @@ import streamlit as st
 
 from product_ui import (
     display_product_library_ui,
-    initialize_product_library,
 )
 
 
 st.set_page_config(
-    page_title="Product Library Test",
+    page_title="Product Library Diagnostic",
     page_icon="📚",
     layout="wide",
 )
@@ -22,11 +21,8 @@ st.success(
 )
 
 
-initialize_product_library()
-
 st.write(
-    f"Products currently in library: "
-    f"{len(st.session_state.product_library)}"
+    "Launching the complete Product Library interface..."
 )
 
 
