@@ -59,125 +59,396 @@ def refresh_product_library():
 
 def add_product_form():
 
+    from product_schema import (
+        get_product_schema,
+        get_category_sections,
+        get_category_icon,
+        get_category_description,
+        validate_category_fields,
+    )
+
     st.subheader(
         "➕ Add Product to Library"
     )
 
-    with st.form(
-        "sqlite_product_add_form",
-        clear_on_submit=True
-    ):
+    # ======================================================
+    # CATEGORY
+    # ======================================================
 
-        col1, col2 = st.columns(2)
+    category = st.selectbox(
+        "Product Category",
+        PRODUCT_CATEGORIES,
+        key="dynamic_product_category"
+    )
 
-        with col1:
+    icon = get_category_icon(
+        category
+    )
 
-            name = st.text_input(
-                "Product Name",
-                placeholder="e.g. 550W Solar Panel",
-                key="sqlite_product_name"
-            )
+    description = get_category_description(
+        category
+    )
 
-            category = st.selectbox(
-                "Category",
-                PRODUCT_CATEGORIES,
-                key="sqlite_product_category"
-            )
+    st.info(
+        f"{icon} **{category}** — {description}"
+    )
 
-            manufacturer = st.text_input(
-                "Manufacturer",
-                key="sqlite_product_manufacturer"
-            )
+    # ======================================================
+    # COMMON PRODUCT INFORMATION
+    # ======================================================
 
-            model = st.text_input(
-                "Model",
-                key="sqlite_product_model"
-            )
+    st.markdown(
+        "### 🏷️ Product Identification"
+    )
 
-            technology = st.selectbox(
-                "Technology",
-                PRODUCT_TECHNOLOGIES,
-                key="sqlite_product_technology"
-            )
+    col1, col2 = st.columns(2)
 
-            supplier = st.text_input(
-                "Supplier",
-                key="sqlite_product_supplier"
-            )
+    with col1:
 
-            country = st.text_input(
-                "Country",
-                key="sqlite_product_country"
-            )
-
-        with col2:
-
-            rated_power_w = st.number_input(
-                "Rated Power (W)",
-                min_value=0.0,
-                value=0.0,
-                step=10.0,
-                key="sqlite_product_power"
-            )
-
-            voltage_v = st.number_input(
-                "Voltage (V)",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
-                key="sqlite_product_voltage"
-            )
-
-            capacity_ah = st.number_input(
-                "Battery Capacity (Ah)",
-                min_value=0.0,
-                value=0.0,
-                step=10.0,
-                key="sqlite_product_capacity"
-            )
-
-            energy_kwh = st.number_input(
-                "Energy Capacity (kWh)",
-                min_value=0.0,
-                value=0.0,
-                step=0.1,
-                key="sqlite_product_energy"
-            )
-
-            efficiency_percent = st.number_input(
-                "Efficiency (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=0.0,
-                step=1.0,
-                key="sqlite_product_efficiency"
-            )
-
-            warranty_years = st.number_input(
-                "Warranty (years)",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
-                key="sqlite_product_warranty"
-            )
-
-        notes = st.text_area(
-            "Notes",
-            placeholder=(
-                "Technical information, supplier notes, "
-                "installation notes, etc."
-            ),
-            key="sqlite_product_notes"
+        name = st.text_input(
+            "Product Name",
+            placeholder="e.g. 550W Solar Panel",
+            key="dynamic_product_name"
         )
 
-        submitted = st.form_submit_button(
-            "💾 Save Product",
-            use_container_width=True
+        manufacturer = st.text_input(
+            "Manufacturer",
+            key="dynamic_product_manufacturer"
         )
+
+        model = st.text_input(
+            "Model",
+            key="dynamic_product_model"
+        )
+
+    with col2:
+
+        technology_options = (
+            PRODUCT_TECHNOLOGIES
+        )
+
+        technology = st.selectbox(
+            "Technology",
+            technology_options,
+            key="dynamic_product_technology"
+        )
+
+        supplier = st.text_input(
+            "Supplier",
+            key="dynamic_product_supplier"
+        )
+
+        country = st.text_input(
+            "Country",
+            key="dynamic_product_country"
+        )
+
+    # ======================================================
+    # CATEGORY-SPECIFIC FIELDS
+    # ======================================================
+
+    specifications = {}
+
+    sections = get_category_sections(
+        category
+    )
+
+    for section_name, fields in sections.items():
+
+        st.markdown(
+            f"### ⚙️ {section_name}"
+        )
+
+        # Two-column layout
+
+        columns = st.columns(2)
+
+        for index, field in enumerate(fields):
+
+            field_name = field["name"]
+            label = field["label"]
+            field_type = field["type"]
+
+            unit = field.get(
+                "unit",
+                ""
+            )
+
+            default = field.get(
+                "default",
+                ""
+            )
+
+            options = field.get(
+                "options",
+                []
+            )
+
+            column = columns[
+                index % 2
+            ]
+
+            with column:
+
+                # ------------------------------------------
+                # NUMBER
+                # ------------------------------------------
+
+                if field_type == "number":
+
+                    min_value = field.get(
+                        "min",
+                        None
+                    )
+
+                    max_value = field.get(
+                        "max",
+                        None
+                    )
+
+                    step = field.get(
+                        "step",
+                        1.0
+                    )
+
+                    # Streamlit number_input requires a
+                    # numeric default.
+
+                    try:
+
+                        numeric_default = float(
+                            default
+                        )
+
+                    except (
+                        ValueError,
+                        TypeError
+                    ):
+
+                        numeric_default = 0.0
+
+                    kwargs = {
+
+                        "label":
+                            f"{label}"
+                            + (
+                                f" ({unit})"
+                                if unit
+                                else ""
+                            ),
+
+                        "value":
+                            numeric_default,
+
+                        "step":
+                            float(step),
+
+                        "key":
+                            f"dynamic_{category}_{field_name}"
+
+                    }
+
+                    if min_value is not None:
+
+                        kwargs[
+                            "min_value"
+                        ] = float(
+                            min_value
+                        )
+
+                    if max_value is not None:
+
+                        kwargs[
+                            "max_value"
+                        ] = float(
+                            max_value
+                        )
+
+                    value = st.number_input(
+                        **kwargs
+                    )
+
+                    specifications[
+                        field_name
+                    ] = value
+
+                # ------------------------------------------
+                # SELECT
+                # ------------------------------------------
+
+                elif field_type == "select":
+
+                    value = st.selectbox(
+
+                        f"{label}"
+                        + (
+                            f" ({unit})"
+                            if unit
+                            else ""
+                        ),
+
+                        options,
+
+                        index=(
+                            options.index(
+                                default
+                            )
+                            if default in options
+                            else 0
+                        ),
+
+                        key=(
+                            f"dynamic_"
+                            f"{category}_"
+                            f"{field_name}"
+                        )
+
+                    )
+
+                    specifications[
+                        field_name
+                    ] = value
+
+                # ------------------------------------------
+                # TEXT
+                # ------------------------------------------
+
+                elif field_type == "text":
+
+                    value = st.text_input(
+
+                        f"{label}"
+                        + (
+                            f" ({unit})"
+                            if unit
+                            else ""
+                        ),
+
+                        value=str(
+                            default
+                        ),
+
+                        key=(
+                            f"dynamic_"
+                            f"{category}_"
+                            f"{field_name}"
+                        )
+
+                    )
+
+                    specifications[
+                        field_name
+                    ] = value
+
+    # ======================================================
+    # COMMERCIAL INFORMATION
+    # ======================================================
+
+    st.markdown(
+        "### 💰 Commercial Information"
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        price = st.number_input(
+            "Unit Price",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            key="dynamic_product_price"
+        )
+
+    with col2:
+
+        currency = st.selectbox(
+
+            "Currency",
+
+            [
+                "USD",
+                "UGX",
+                "NGN",
+                "KES",
+                "TZS",
+                "RWF",
+                "GHS",
+                "ZAR",
+                "EUR",
+                "GBP",
+                "Other"
+            ],
+
+            key="dynamic_product_currency"
+
+        )
+
+    with col3:
+
+        quantity = st.number_input(
+            "Available Quantity",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            key="dynamic_product_quantity"
+        )
+
+    notes = st.text_area(
+
+        "Notes",
+
+        placeholder=(
+            "Technical information, supplier notes, "
+            "installation notes, source, etc."
+        ),
+
+        key="dynamic_product_notes"
+
+    )
+
+    # ======================================================
+    # VALIDATION
+    # ======================================================
+
+    validation_errors = (
+        validate_category_fields(
+            category,
+            specifications
+        )
+    )
+
+    if validation_errors:
+
+        for error in validation_errors:
+
+            st.warning(
+                error
+            )
+
+    # ======================================================
+    # SAVE
+    # ======================================================
+
+    submitted = st.button(
+
+        "💾 Save Product to Library",
+
+        use_container_width=True,
+
+        type="primary",
+
+        key="dynamic_save_product"
+
+    )
 
     if not submitted:
 
         return
+
+    # ------------------------------------------------------
+    # Basic validation
+    # ------------------------------------------------------
 
     if not name.strip():
 
@@ -186,6 +457,19 @@ def add_product_form():
         )
 
         return
+
+    if validation_errors:
+
+        st.error(
+            "Please correct the specification errors "
+            "before saving."
+        )
+
+        return
+
+    # ======================================================
+    # BUILD PRODUCT
+    # ======================================================
 
     product = {
 
@@ -204,50 +488,183 @@ def add_product_form():
         "technology":
             technology,
 
-        "rated_power_w":
-            rated_power_w,
-
-        "voltage_v":
-            voltage_v,
-
-        "capacity_ah":
-            capacity_ah,
-
-        "energy_kwh":
-            energy_kwh,
-
-        "efficiency_percent":
-            efficiency_percent,
-
-        "warranty_years":
-            warranty_years,
-
         "supplier":
             supplier,
 
         "country":
             country,
 
+        "rated_power_w":
+            specifications.get(
+                "rated_power_w",
+                0
+            ),
+
+        "voltage_v":
+            specifications.get(
+                "nominal_voltage_v",
+                specifications.get(
+                    "dc_nominal_voltage_v",
+                    specifications.get(
+                        "vmp_v",
+                        specifications.get(
+                            "rated_voltage_v",
+                            0
+                        )
+                    )
+                )
+            ),
+
+        "capacity_ah":
+            specifications.get(
+                "capacity_ah",
+                0
+            ),
+
+        "energy_kwh":
+            specifications.get(
+                "energy_kwh",
+                0
+            ),
+
+        "efficiency_percent":
+            specifications.get(
+                "efficiency_percent",
+                specifications.get(
+                    "round_trip_efficiency_percent",
+                    0
+                )
+            ),
+
+        "warranty_years":
+            specifications.get(
+                "warranty_years",
+                specifications.get(
+                    "product_warranty_years",
+                    0
+                )
+            ),
+
+        "price":
+            price,
+
+        "currency":
+            currency,
+
+        "quantity":
+            quantity,
+
         "notes":
             notes,
 
+        "specifications":
+            specifications
+
     }
 
-    # Validate through product engine first
+    # ======================================================
+    # VALIDATE THROUGH PRODUCT ENGINE
+    # ======================================================
 
-    validation = create_product(
-        **product
-    )
+    try:
 
-    if not validation["success"]:
-
-        st.error(
-            validation["message"]
+        validation = create_product(
+            **product
         )
 
-        return
+        if not validation["success"]:
 
-    # Save directly to SQLite
+            st.error(
+                validation.get(
+                    "message",
+                    "Product validation failed."
+                )
+            )
+
+            return
+
+    except TypeError:
+
+        # Compatibility with the current
+        # product_engine.py if it does not yet
+        # accept price/specifications.
+
+        basic_product = {
+
+            "name":
+                name,
+
+            "category":
+                category,
+
+            "manufacturer":
+                manufacturer,
+
+            "model":
+                model,
+
+            "technology":
+                technology,
+
+            "rated_power_w":
+                product[
+                    "rated_power_w"
+                ],
+
+            "voltage_v":
+                product[
+                    "voltage_v"
+                ],
+
+            "capacity_ah":
+                product[
+                    "capacity_ah"
+                ],
+
+            "energy_kwh":
+                product[
+                    "energy_kwh"
+                ],
+
+            "efficiency_percent":
+                product[
+                    "efficiency_percent"
+                ],
+
+            "warranty_years":
+                product[
+                    "warranty_years"
+                ],
+
+            "supplier":
+                supplier,
+
+            "country":
+                country,
+
+            "notes":
+                notes
+
+        }
+
+        validation = create_product(
+            **basic_product
+        )
+
+        if not validation["success"]:
+
+            st.error(
+                validation.get(
+                    "message",
+                    "Product validation failed."
+                )
+            )
+
+            return
+
+    # ======================================================
+    # SAVE
+    # ======================================================
 
     try:
 
@@ -258,8 +675,10 @@ def add_product_form():
         refresh_product_library()
 
         st.success(
-            f"✅ Product saved successfully "
-            f"(Database ID: {product_id})."
+
+            f"✅ {icon} {category} saved successfully. "
+            f"Database ID: {product_id}"
+
         )
 
     except Exception as error:
@@ -267,8 +686,6 @@ def add_product_form():
         st.error(
             f"Unable to save product: {error}"
         )
-
-
 # ==========================================================
 # SEARCH AND FILTER
 # ==========================================================
