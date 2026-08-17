@@ -350,14 +350,39 @@ def update_product(product_id, product):
 
 
 def create_product(**kwargs):
+    """
+    Compatibility wrapper for product_engine/library_store.
+
+    Different versions of product_engine.py may expose create_product()
+    with different parameters. This wrapper uses _call() so only arguments
+    accepted by the active engine are passed through.
+    """
     fn = _engine("create_product")
+
     if fn:
         try:
-            result = fn(**kwargs)
-            return result if isinstance(result, dict) else {"success": True, "product": result}
+            result = _call(fn, **kwargs)
+
+            if isinstance(result, dict):
+                return result
+
+            return {
+                "success": True,
+                "product": result
+            }
+
         except Exception as exc:
-            return {"success": False, "message": str(exc)}
-    return {"success": True, "product": kwargs}
+            return {
+                "success": False,
+                "message": str(exc)
+            }
+
+    # If no engine-level create_product exists, the UI's add_product()
+    # function will handle persistence using library_store or SQLite.
+    return {
+        "success": True,
+        "product": kwargs
+    }
 
 
 def validate_category_fields(category, specifications):
