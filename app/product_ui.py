@@ -1138,7 +1138,630 @@ def delete_product_interface():
                 )
             )
 
+# ============================================================
+# EDIT PRODUCT INTERFACE
+# ============================================================
 
+def edit_product_interface():
+    """
+    Edit an existing product in the persistent library.
+    """
+
+    st.subheader("✏️ Edit Product")
+
+    products = get_products()
+
+    if not products:
+        st.info("No products are available to edit.")
+        return
+
+    product_options = {
+        (
+            f"{product.get('name', 'Unnamed Product')} "
+            f"| {product.get('category', 'Other')} "
+            f"| ID: {product.get('id', '')}"
+        ): product
+        for product in products
+    }
+
+    selected_label = st.selectbox(
+        "Select Product to Edit",
+        options=list(product_options.keys()),
+        key="edit_product_selector",
+    )
+
+    selected_product = product_options[selected_label]
+
+    if not selected_product:
+        st.warning("Please select a product.")
+        return
+
+    st.info(
+        f"Editing: **{selected_product.get('name')}**"
+    )
+
+    product_id = selected_product.get("id")
+
+    # --------------------------------------------------------
+    # BASIC PRODUCT INFORMATION
+    # --------------------------------------------------------
+
+    st.markdown("### Basic Product Information")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        name = st.text_input(
+            "Product Name *",
+            value=selected_product.get("name", ""),
+            key=f"edit_name_{product_id}",
+        )
+
+        manufacturer = st.text_input(
+            "Manufacturer",
+            value=selected_product.get("manufacturer", ""),
+            key=f"edit_manufacturer_{product_id}",
+        )
+
+        model = st.text_input(
+            "Model",
+            value=selected_product.get("model", ""),
+            key=f"edit_model_{product_id}",
+        )
+
+    with col2:
+
+        supplier = st.text_input(
+            "Supplier",
+            value=selected_product.get("supplier", ""),
+            key=f"edit_supplier_{product_id}",
+        )
+
+        country = st.text_input(
+            "Country",
+            value=selected_product.get("country", ""),
+            key=f"edit_country_{product_id}",
+        )
+
+        warranty_years = st.number_input(
+            "Warranty (Years)",
+            min_value=0,
+            value=safe_int(
+                selected_product.get("warranty_years", 0)
+            ),
+            step=1,
+            key=f"edit_warranty_{product_id}",
+        )
+
+    # --------------------------------------------------------
+    # CATEGORY
+    # --------------------------------------------------------
+
+    current_category = selected_product.get(
+        "category",
+        "Other"
+    )
+
+    if current_category not in PRODUCT_CATEGORIES:
+        current_category = "Other"
+
+    category_index = PRODUCT_CATEGORIES.index(
+        current_category
+    )
+
+    category = st.selectbox(
+        "Product Category",
+        PRODUCT_CATEGORIES,
+        index=category_index,
+        key=f"edit_category_{product_id}",
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # CATEGORY-SPECIFIC SPECIFICATIONS
+    # --------------------------------------------------------
+
+    st.markdown(
+        f"### {category} Specifications"
+    )
+
+    updated_data = {}
+
+    # ========================================================
+    # SOLAR PANEL
+    # ========================================================
+
+    if category == "Solar Panel":
+
+        technologies = [
+            "Monocrystalline",
+            "Polycrystalline",
+            "Thin Film",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other"
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Panel Technology",
+            technologies,
+            index=technologies.index(current_technology),
+            key=f"edit_panel_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            rated_power_w = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "rated_power_w",
+                        0
+                    )
+                ),
+                step=10.0,
+                key=f"edit_panel_power_{product_id}",
+            )
+
+        with col2:
+
+            voltage_v = st.number_input(
+                "Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0
+                    )
+                ),
+                step=0.1,
+                key=f"edit_panel_voltage_{product_id}",
+            )
+
+        with col3:
+
+            current_a = st.number_input(
+                "Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "current_a",
+                        0
+                    )
+                ),
+                step=0.1,
+                key=f"edit_panel_current_{product_id}",
+            )
+
+        efficiency_percent = st.number_input(
+            "Efficiency (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=safe_float(
+                selected_product.get(
+                    "efficiency_percent",
+                    0
+                )
+            ),
+            step=0.1,
+            key=f"edit_panel_efficiency_{product_id}",
+        )
+
+        updated_data.update({
+            "technology": technology,
+            "rated_power_w": rated_power_w,
+            "voltage_v": voltage_v,
+            "current_a": current_a,
+            "efficiency_percent": efficiency_percent,
+        })
+
+    # ========================================================
+    # BATTERY
+    # ========================================================
+
+    elif category == "Battery":
+
+        technologies = [
+            "Lithium",
+            "LiFePO4",
+            "Lead Acid",
+            "AGM",
+            "Gel",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other"
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Battery Technology",
+            technologies,
+            index=technologies.index(current_technology),
+            key=f"edit_battery_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            voltage_v = st.number_input(
+                "Nominal Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0
+                    )
+                ),
+                step=0.1,
+                key=f"edit_battery_voltage_{product_id}",
+            )
+
+        with col2:
+
+            capacity_ah = st.number_input(
+                "Capacity (Ah)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "capacity_ah",
+                        0
+                    )
+                ),
+                step=1.0,
+                key=f"edit_battery_capacity_{product_id}",
+            )
+
+        with col3:
+
+            energy_kwh = st.number_input(
+                "Energy Capacity (kWh)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "energy_kwh",
+                        0
+                    )
+                ),
+                step=0.1,
+                key=f"edit_battery_energy_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "voltage_v": voltage_v,
+            "capacity_ah": capacity_ah,
+            "energy_kwh": energy_kwh,
+        })
+
+    # ========================================================
+    # INVERTER
+    # ========================================================
+
+    elif category == "Inverter":
+
+        technologies = [
+            "Hybrid",
+            "Off Grid",
+            "On Grid",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other"
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Inverter Type",
+            technologies,
+            index=technologies.index(current_technology),
+            key=f"edit_inverter_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            rated_power_w = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "rated_power_w",
+                        0
+                    )
+                ),
+                step=100.0,
+                key=f"edit_inverter_power_{product_id}",
+            )
+
+        with col2:
+
+            voltage_v = st.number_input(
+                "System/DC Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0
+                    )
+                ),
+                step=1.0,
+                key=f"edit_inverter_voltage_{product_id}",
+            )
+
+        with col3:
+
+            efficiency_percent = st.number_input(
+                "Efficiency (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    selected_product.get(
+                        "efficiency_percent",
+                        0
+                    )
+                ),
+                step=0.1,
+                key=f"edit_inverter_efficiency_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "rated_power_w": rated_power_w,
+            "voltage_v": voltage_v,
+            "efficiency_percent": efficiency_percent,
+        })
+
+    # ========================================================
+    # CHARGE CONTROLLER
+    # ========================================================
+
+    elif category == "Charge Controller":
+
+        technologies = [
+            "MPPT",
+            "PWM",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other"
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Controller Type",
+            technologies,
+            index=technologies.index(current_technology),
+            key=f"edit_controller_technology_{product_id}",
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            voltage_v = st.number_input(
+                "System Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0
+                    )
+                ),
+                step=1.0,
+                key=f"edit_controller_voltage_{product_id}",
+            )
+
+        with col2:
+
+            current_a = st.number_input(
+                "Rated Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "current_a",
+                        0
+                    )
+                ),
+                step=1.0,
+                key=f"edit_controller_current_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "voltage_v": voltage_v,
+            "current_a": current_a,
+        })
+
+    # ========================================================
+    # OTHER COMPONENTS
+    # ========================================================
+
+    else:
+
+        technology = st.text_input(
+            "Technology / Type",
+            value=selected_product.get(
+                "technology",
+                ""
+            ),
+            key=f"edit_technology_{product_id}",
+        )
+
+        updated_data["technology"] = technology
+
+    # --------------------------------------------------------
+    # PRICE INFORMATION
+    # --------------------------------------------------------
+
+    st.divider()
+
+    st.markdown("### Commercial Information")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        price = st.number_input(
+            "Unit Price",
+            min_value=0.0,
+            value=safe_float(
+                selected_product.get("price", 0)
+            ),
+            step=1.0,
+            key=f"edit_price_{product_id}",
+        )
+
+    with col2:
+
+        currencies = [
+            "USD",
+            "UGX",
+            "NGN",
+            "EUR",
+            "GBP",
+            "Other",
+        ]
+
+        current_currency = selected_product.get(
+            "currency",
+            "USD"
+        )
+
+        if current_currency not in currencies:
+            current_currency = "USD"
+
+        currency = st.selectbox(
+            "Currency",
+            currencies,
+            index=currencies.index(current_currency),
+            key=f"edit_currency_{product_id}",
+        )
+
+    with col3:
+
+        quantity = st.number_input(
+            "Quantity",
+            min_value=1,
+            value=max(
+                1,
+                safe_int(
+                    selected_product.get(
+                        "quantity",
+                        1
+                    )
+                )
+            ),
+            step=1,
+            key=f"edit_quantity_{product_id}",
+        )
+
+    notes = st.text_area(
+        "Notes",
+        value=selected_product.get("notes", ""),
+        key=f"edit_notes_{product_id}",
+    )
+
+    # --------------------------------------------------------
+    # SAVE CHANGES
+    # --------------------------------------------------------
+
+    st.divider()
+
+    if st.button(
+        "💾 Save Changes",
+        type="primary",
+        use_container_width=True,
+        key=f"save_changes_{product_id}",
+    ):
+
+        if not name.strip():
+
+            st.error(
+                "Product name cannot be empty."
+            )
+
+            return
+
+        # Common updated fields
+        updated_data.update({
+            "name": name.strip(),
+            "category": category,
+            "manufacturer": manufacturer.strip(),
+            "model": model.strip(),
+            "supplier": supplier.strip(),
+            "country": country.strip(),
+            "warranty_years": warranty_years,
+            "price": price,
+            "currency": currency,
+            "quantity": quantity,
+            "notes": notes.strip(),
+        })
+
+        try:
+
+            result = update_product(
+                product_id,
+                updated_data
+            )
+
+            if isinstance(result, dict):
+
+                if result.get("success") is False:
+
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to update product."
+                        )
+                    )
+
+                else:
+
+                    st.success(
+                        "Product updated successfully."
+                    )
+
+                    st.rerun()
+
+            else:
+
+                st.success(
+                    "Product updated successfully."
+                )
+
+                st.rerun()
+
+        except Exception as exc:
+
+            st.error(
+                f"Unable to update product: {exc}"
+            )
 # ============================================================
 # DATABASE MANAGEMENT
 # ============================================================
@@ -1214,13 +1837,14 @@ def display_product_library_ui():
         "components in your persistent product library."
     )
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "➕ Add Product",
-        "📚 Product Library",
-        "🔎 Search & Filter",
-        "⚖️ Compare",
-        "🗄️ Storage",
-    ])
+ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "➕ Add Product",
+    "📚 Product Library",
+    "✏️ Edit Product",
+    "🔎 Search & Filter",
+    "⚖️ Compare",
+    "🗄️ Storage",
+])
 
     with tab1:
         add_product_form()
@@ -1334,15 +1958,16 @@ def display_product_library_ui():
 
             if selected_product:
                 product_details(selected_product)
-
     with tab3:
-        product_search_interface()
-
+    edit_product_interface()
     with tab4:
-        product_comparison()
+    product_search_interface()
 
     with tab5:
-        database_management()
+    product_comparison()
+
+    with tab6:
+    database_management()
 
 
 # ============================================================
