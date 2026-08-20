@@ -1,165 +1,143 @@
-# ==========================================================
-# SOLAR PV DESIGNER PRO AFRICA™
-# Library Storage Engine
-# Version: 2.4.0
-# ==========================================================
-#
-# Purpose:
-# Persistent local storage for:
-#   1. Product Library
-#   2. Service / Cost Library
-#
-# Storage format:
-# JSON
-#
-# This module is deliberately independent from Streamlit UI.
-# ==========================================================
+"""
+Solar PV Designer Pro Africa™
+Persistent Product and Service Library Storage
+
+Files:
+    app/data/product_library.json
+    app/data/service_library.json
+"""
 
 import json
+import shutil
 from pathlib import Path
 from datetime import datetime
 
 
-# ==========================================================
-# SECTION 1 - STORAGE LOCATION
-# ==========================================================
+# ============================================================
+# PATH CONFIGURATION
+# ============================================================
 
-APP_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = APP_DIR / "data"
+DATA_DIR = BASE_DIR / "data"
 
-PRODUCT_LIBRARY_FILE = (
-    DATA_DIR / "product_library.json"
-)
+PRODUCT_LIBRARY_FILE = DATA_DIR / "product_library.json"
 
-SERVICE_LIBRARY_FILE = (
-    DATA_DIR / "service_library.json"
-)
+SERVICE_LIBRARY_FILE = DATA_DIR / "service_library.json"
+
+BACKUP_DIR = DATA_DIR / "backups"
 
 
-# ==========================================================
-# SECTION 2 - DIRECTORY MANAGEMENT
-# ==========================================================
+# ============================================================
+# DIRECTORY INITIALIZATION
+# ============================================================
 
 def ensure_data_directory():
+    """Create data and backup directories if they do not exist."""
 
-    DATA_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Create empty product library if missing
+    if not PRODUCT_LIBRARY_FILE.exists():
+        save_json_file(PRODUCT_LIBRARY_FILE, [])
+
+    # Create empty service library if missing
+    if not SERVICE_LIBRARY_FILE.exists():
+        save_json_file(SERVICE_LIBRARY_FILE, [])
 
     return DATA_DIR
 
 
-# ==========================================================
-# SECTION 3 - GENERIC JSON LOAD
-# ==========================================================
+# ============================================================
+# JSON HELPERS
+# ============================================================
 
-def load_json_file(
-    file_path,
-    default=None
-):
+def load_json_file(file_path, default=None):
+    """
+    Safely load a JSON file.
+
+    Returns the supplied default value if the file does not
+    exist or cannot be read.
+    """
+
+    ensure_data_directory()
+
+    file_path = Path(file_path)
 
     if default is None:
         default = []
 
+    if not file_path.exists():
+        save_json_file(file_path, default)
+        return default
+
     try:
-
-        ensure_data_directory()
-
-        if not file_path.exists():
-
-            return default
-
-        with open(
-            file_path,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
+        with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         return data
 
-    except (
-        OSError,
-        json.JSONDecodeError,
-        TypeError
-    ):
+    except json.JSONDecodeError:
+        return default
 
+    except Exception:
         return default
 
 
-# ==========================================================
-# SECTION 4 - GENERIC JSON SAVE
-# ==========================================================
+def save_json_file(file_path, data):
+    """
+    Safely save Python data to JSON.
+    """
 
-def save_json_file(
-    file_path,
-    data
-):
+    file_path = Path(file_path)
 
-    try:
+    file_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-        ensure_data_directory()
+    with open(file_path, "w", encoding="utf-8") as file:
 
-        with open(
-            file_path,
-            "w",
-            encoding="utf-8"
-        ) as file:
+        json.dump(
+            data,
+            file,
+            indent=4,
+            ensure_ascii=False,
+            default=str
+        )
 
-            json.dump(
-                data,
-                file,
-                indent=2,
-                ensure_ascii=False
-            )
-
-        return {
-            "success": True,
-            "message":
-                "Library saved successfully."
-        }
-
-    except (
-        OSError,
-        TypeError
-    ) as error:
-
-        return {
-            "success": False,
-            "message":
-                f"Unable to save library: {error}"
-        }
+    return True
 
 
-# ==========================================================
-# SECTION 5 - PRODUCT LIBRARY
-# ==========================================================
+# ============================================================
+# PRODUCT LIBRARY
+# ============================================================
 
 def load_product_library():
+    """Load all products from the product library."""
 
-    return load_json_file(
+    ensure_data_directory()
+
+    data = load_json_file(
         PRODUCT_LIBRARY_FILE,
-        []
+        default=[]
     )
 
+    if isinstance(data, list):
+        return data
 
-def save_product_library(
-    products
-):
+    return []
 
-    if not isinstance(
-        products,
-        list
-    ):
 
-        return {
-            "success": False,
-            "message":
-                "Product library must be a list."
-        }
+def save_product_library(products):
+    """Save the complete product library."""
+
+    ensure_data_directory()
+
+    if products is None:
+        products = []
 
     return save_json_file(
         PRODUCT_LIBRARY_FILE,
@@ -167,435 +145,489 @@ def save_product_library(
     )
 
 
-def add_product_to_library(
-    product
-):
+def add_product_to_library(product):
+    """
+    Add a product to the persistent product library.
+    """
 
     products = load_product_library()
 
-    if not isinstance(
-        product,
-        dict
-    ):
+    if not isinstance(product, dict):
+        raise ValueError(
+            "Product must be a dictionary."
+        )
 
-        return {
-            "success": False,
-            "message":
-                "Product must be a dictionary."
-        }
+    product = product.copy()
 
-    product = dict(product)
+    # Generate ID if one does not already exist
+    if not product.get("id"):
 
-    product.setdefault(
-        "created_at",
-        datetime.now().isoformat()
-    )
+        timestamp = datetime.now().strftime(
+            "%Y%m%d%H%M%S%f"
+        )
 
-    products.append(
+        product["id"] = f"PROD-{timestamp}"
+
+    # Add timestamps
+    now = datetime.now().isoformat()
+
+    if not product.get("created_at"):
+        product["created_at"] = now
+
+    product["updated_at"] = now
+
+    products.append(product)
+
+    save_product_library(products)
+
+    return product
+
+
+def get_product_from_library(product_id):
+    """Retrieve a single product by ID."""
+
+    products = load_product_library()
+
+    for product in products:
+
+        if str(product.get("id")) == str(product_id):
+            return product
+
+    return None
+
+
+def update_product_in_library(product_id, updated_data):
+    """
+    Update an existing product.
+    """
+
+    products = load_product_library()
+
+    for index, product in enumerate(products):
+
+        if str(product.get("id")) == str(product_id):
+
+            original_created_at = product.get(
+                "created_at"
+            )
+
+            product.update(updated_data)
+
+            product["id"] = product_id
+
+            product["created_at"] = original_created_at
+
+            product["updated_at"] = (
+                datetime.now().isoformat()
+            )
+
+            products[index] = product
+
+            save_product_library(products)
+
+            return {
+                "success": True,
+                "product": product,
+                "message": "Product updated successfully."
+            }
+
+    return {
+        "success": False,
+        "message": "Product not found."
+    }
+
+
+def remove_product_from_library(product_id):
+    """
+    Remove a product from the library.
+    """
+
+    products = load_product_library()
+
+    original_count = len(products)
+
+    products = [
+
         product
-    )
+        for product in products
 
-    result = save_product_library(
-        products
-    )
+        if str(product.get("id"))
+        != str(product_id)
+    ]
 
-    if result["success"]:
+    if len(products) == original_count:
 
-        result["product"] = product
+        return {
+            "success": False,
+            "message": "Product not found."
+        }
 
-    return result
+    save_product_library(products)
+
+    return {
+        "success": True,
+        "message": "Product removed successfully."
+    }
 
 
-def remove_product_from_library(
-    index
+def search_product_library(
+    query="",
+    category=None,
+    technology=None
 ):
+    """
+    Search the product library.
+    """
 
     products = load_product_library()
 
-    try:
+    results = []
 
-        index = int(index)
+    query = str(query or "").lower().strip()
 
-    except (
-        TypeError,
-        ValueError
-    ):
+    for product in products:
 
-        return {
-            "success": False,
-            "message":
-                "Invalid product index."
-        }
+        # Category filter
+        if category:
 
-    if index < 0 or index >= len(
-        products
-    ):
+            if str(
+                product.get("category", "")
+            ) != str(category):
 
-        return {
-            "success": False,
-            "message":
-                "Product index is out of range."
-        }
+                continue
 
-    removed = products.pop(
-        index
-    )
+        # Technology filter
+        if technology:
 
-    result = save_product_library(
-        products
-    )
+            if str(
+                product.get("technology", "")
+            ) != str(technology):
 
-    if result["success"]:
+                continue
 
-        result["removed"] = removed
+        # Search query
+        if query:
 
-    return result
+            searchable_text = " ".join(
 
+                str(value)
 
-# ==========================================================
-# SECTION 6 - SERVICE LIBRARY
-# ==========================================================
+                for value in product.values()
 
-def load_service_library():
+                if value is not None
 
-    return load_json_file(
-        SERVICE_LIBRARY_FILE,
-        []
-    )
+            ).lower()
+
+            if query not in searchable_text:
+
+                continue
+
+        results.append(product)
+
+    return results
 
 
-def save_service_library(
-    services
-):
+def clear_product_library():
+    """
+    Clear all products.
 
-    if not isinstance(
-        services,
-        list
-    ):
+    A backup is created first.
+    """
 
-        return {
-            "success": False,
-            "message":
-                "Service library must be a list."
-        }
+    backup_library()
 
-    return save_json_file(
-        SERVICE_LIBRARY_FILE,
-        services
-    )
+    save_product_library([])
+
+    return {
+        "success": True,
+        "message": "Product library cleared."
+    }
 
 
-# ==========================================================
-# SECTION 7 - SERVICE RECORD
-# ==========================================================
+# ============================================================
+# SERVICE LIBRARY
+# ============================================================
 
 def create_service_record(
     name,
-    category="Service",
-    unit="job",
-    unit_price=0.0,
-    currency="UGX",
-    supplier="",
-    location="",
-    notes="",
+    category="Other Service",
+    price=0,
+    currency="USD",
+    **kwargs
 ):
+    """
+    Create a standard service record.
+    """
 
-    try:
+    timestamp = datetime.now().strftime(
+        "%Y%m%d%H%M%S%f"
+    )
 
-        unit_price = float(
-            unit_price
-        )
+    service = {
 
-    except (
-        TypeError,
-        ValueError
-    ):
+        "id": f"SERV-{timestamp}",
 
-        unit_price = 0.0
+        "name": name,
 
-    return {
+        "category": category,
 
-        "name":
-            str(name).strip(),
+        "price": price,
 
-        "category":
-            str(category).strip(),
-
-        "unit":
-            str(unit).strip(),
-
-        "unit_price":
-            unit_price,
-
-        "currency":
-            str(currency).strip(),
-
-        "supplier":
-            str(supplier).strip(),
-
-        "location":
-            str(location).strip(),
-
-        "notes":
-            str(notes).strip(),
+        "currency": currency,
 
         "created_at":
             datetime.now().isoformat(),
 
+        "updated_at":
+            datetime.now().isoformat()
+    }
+
+    service.update(kwargs)
+
+    return service
+
+
+def load_service_library():
+    """Load all services."""
+
+    ensure_data_directory()
+
+    data = load_json_file(
+        SERVICE_LIBRARY_FILE,
+        default=[]
+    )
+
+    if isinstance(data, list):
+        return data
+
+    return []
+
+
+def save_service_library(services):
+    """Save the complete service library."""
+
+    ensure_data_directory()
+
+    if services is None:
+        services = []
+
+    return save_json_file(
+        SERVICE_LIBRARY_FILE,
+        services
+    )
+
+
+def add_service_to_library(service):
+    """Add a service."""
+
+    services = load_service_library()
+
+    if not isinstance(service, dict):
+
+        raise ValueError(
+            "Service must be a dictionary."
+        )
+
+    service = service.copy()
+
+    if not service.get("id"):
+
+        timestamp = datetime.now().strftime(
+            "%Y%m%d%H%M%S%f"
+        )
+
+        service["id"] = f"SERV-{timestamp}"
+
+    now = datetime.now().isoformat()
+
+    if not service.get("created_at"):
+
+        service["created_at"] = now
+
+    service["updated_at"] = now
+
+    services.append(service)
+
+    save_service_library(services)
+
+    return service
+
+
+def remove_service_from_library(service_id):
+
+    services = load_service_library()
+
+    original_count = len(services)
+
+    services = [
+
+        service
+        for service in services
+
+        if str(service.get("id"))
+        != str(service_id)
+
+    ]
+
+    if len(services) == original_count:
+
+        return {
+            "success": False,
+            "message": "Service not found."
+        }
+
+    save_service_library(services)
+
+    return {
+        "success": True,
+        "message": "Service removed successfully."
     }
 
 
-def add_service_to_library(
-    service
-):
-
-    services = load_service_library()
-
-    if not isinstance(
-        service,
-        dict
-    ):
-
-        return {
-            "success": False,
-            "message":
-                "Service must be a dictionary."
-        }
-
-    services.append(
-        dict(service)
-    )
-
-    return save_service_library(
-        services
-    )
-
-
-def remove_service_from_library(
-    index
-):
-
-    services = load_service_library()
-
-    try:
-
-        index = int(index)
-
-    except (
-        TypeError,
-        ValueError
-    ):
-
-        return {
-            "success": False,
-            "message":
-                "Invalid service index."
-        }
-
-    if index < 0 or index >= len(
-        services
-    ):
-
-        return {
-            "success": False,
-            "message":
-                "Service index is out of range."
-        }
-
-    removed = services.pop(
-        index
-    )
-
-    result = save_service_library(
-        services
-    )
-
-    if result["success"]:
-
-        result["removed"] = removed
-
-    return result
-
-
-# ==========================================================
-# SECTION 8 - SEARCH PRODUCTS
-# ==========================================================
-
-def search_product_library(
-    query
-):
-
-    products = load_product_library()
-
-    query = str(
-        query
-    ).strip().lower()
-
-    if not query:
-
-        return products
-
-    results = []
-
-    for product in products:
-
-        if not isinstance(
-            product,
-            dict
-        ):
-
-            continue
-
-        searchable = " ".join([
-
-            str(
-                product.get(
-                    "name",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "manufacturer",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "model",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "category",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "technology",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "supplier",
-                    ""
-                )
-            ),
-
-            str(
-                product.get(
-                    "country",
-                    ""
-                )
-            ),
-
-        ]).lower()
-
-        if query in searchable:
-
-            results.append(
-                product
-            )
-
-    return results
-
-
-# ==========================================================
-# SECTION 9 - SEARCH SERVICES
-# ==========================================================
-
 def search_service_library(
-    query
+    query="",
+    category=None
 ):
 
     services = load_service_library()
 
-    query = str(
-        query
-    ).strip().lower()
-
-    if not query:
-
-        return services
-
     results = []
+
+    query = str(query or "").lower().strip()
 
     for service in services:
 
-        if not isinstance(
-            service,
-            dict
-        ):
+        if category:
 
-            continue
+            if str(
+                service.get("category", "")
+            ) != str(category):
 
-        searchable = " ".join([
+                continue
 
-            str(
-                service.get(
-                    "name",
-                    ""
-                )
-            ),
+        if query:
 
-            str(
-                service.get(
-                    "category",
-                    ""
-                )
-            ),
+            searchable_text = " ".join(
 
-            str(
-                service.get(
-                    "supplier",
-                    ""
-                )
-            ),
+                str(value)
 
-            str(
-                service.get(
-                    "location",
-                    ""
-                )
-            ),
+                for value in service.values()
 
-            str(
-                service.get(
-                    "notes",
-                    ""
-                )
-            ),
+                if value is not None
 
-        ]).lower()
+            ).lower()
 
-        if query in searchable:
+            if query not in searchable_text:
 
-            results.append(
-                service
-            )
+                continue
+
+        results.append(service)
 
     return results
 
 
-# ==========================================================
-# SECTION 10 - LIBRARY SUMMARY
-# ==========================================================
+def clear_service_library():
+
+    backup_library()
+
+    save_service_library([])
+
+    return {
+        "success": True,
+        "message": "Service library cleared."
+    }
+
+
+# ============================================================
+# BACKUP SYSTEM
+# ============================================================
+
+def backup_library():
+    """
+    Create timestamped backups of product and service libraries.
+    """
+
+    ensure_data_directory()
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
+
+    backup_files = []
+
+    files_to_backup = [
+
+        PRODUCT_LIBRARY_FILE,
+        SERVICE_LIBRARY_FILE
+    ]
+
+    for source_file in files_to_backup:
+
+        if source_file.exists():
+
+            destination = (
+
+                BACKUP_DIR
+
+                / f"{source_file.stem}_{timestamp}.json"
+
+            )
+
+            shutil.copy2(
+                source_file,
+                destination
+            )
+
+            backup_files.append(
+                str(destination)
+            )
+
+    return {
+
+        "success": True,
+
+        "timestamp": timestamp,
+
+        "files": backup_files
+    }
+
+
+# ============================================================
+# COMPLETE LIBRARY MANAGEMENT
+# ============================================================
+
+def clear_all_libraries():
+    """
+    Back up and clear both product and service libraries.
+    """
+
+    backup_result = backup_library()
+
+    save_product_library([])
+
+    save_service_library([])
+
+    return {
+
+        "success": True,
+
+        "message":
+            "All libraries cleared successfully.",
+
+        "backup": backup_result
+    }
+
 
 def get_library_summary():
+    """
+    Return a summary of stored records.
+    """
 
     products = load_product_library()
 
     services = load_service_library()
 
-    product_categories = {}
+    categories = {}
 
     for product in products:
 
@@ -604,11 +636,8 @@ def get_library_summary():
             "Other"
         )
 
-        product_categories[category] = (
-            product_categories.get(
-                category,
-                0
-            ) + 1
+        categories[category] = (
+            categories.get(category, 0) + 1
         )
 
     service_categories = {}
@@ -617,145 +646,45 @@ def get_library_summary():
 
         category = service.get(
             "category",
-            "Service"
+            "Other"
         )
 
         service_categories[category] = (
+
             service_categories.get(
                 category,
                 0
-            ) + 1
+            )
+
+            + 1
         )
 
     return {
 
-        "product_count":
-            len(products),
+        "total_products": len(products),
 
-        "service_count":
-            len(services),
+        "total_services": len(services),
 
-        "total_library_items":
-            len(products) + len(services),
-
-        "product_categories":
-            product_categories,
+        "product_categories": categories,
 
         "service_categories":
             service_categories,
 
+        "data_directory": str(DATA_DIR),
+
+        "product_library_file":
+            str(PRODUCT_LIBRARY_FILE),
+
+        "service_library_file":
+            str(SERVICE_LIBRARY_FILE),
+
+        "backup_directory":
+            str(BACKUP_DIR)
     }
 
 
-# ==========================================================
-# SECTION 11 - BACKUP
-# ==========================================================
+# ============================================================
+# INITIALIZE STORAGE ON IMPORT
+# ============================================================
 
-def backup_library():
-
-    ensure_data_directory()
-
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
-    )
-
-    backup_dir = (
-        DATA_DIR / "backups"
-    )
-
-    backup_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    product_backup = (
-        backup_dir /
-        f"product_library_{timestamp}.json"
-    )
-
-    service_backup = (
-        backup_dir /
-        f"service_library_{timestamp}.json"
-    )
-
-    products = load_product_library()
-
-    services = load_service_library()
-
-    product_result = save_json_file(
-        product_backup,
-        products
-    )
-
-    service_result = save_json_file(
-        service_backup,
-        services
-    )
-
-    return {
-
-        "success":
-            (
-                product_result["success"]
-                and
-                service_result["success"]
-            ),
-
-        "product_backup":
-            str(product_backup),
-
-        "service_backup":
-            str(service_backup),
-
-    }
-
-
-# ==========================================================
-# SECTION 12 - CLEAR LIBRARIES
-# ==========================================================
-
-def clear_product_library():
-
-    return save_product_library([])
-
-
-def clear_service_library():
-
-    return save_service_library([])
-
-
-# ==========================================================
-# SECTION 13 - COMPLETE LIBRARY RESET
-# ==========================================================
-
-def clear_all_libraries():
-
-    product_result = (
-        clear_product_library()
-    )
-
-    service_result = (
-        clear_service_library()
-    )
-
-    return {
-
-        "success":
-            (
-                product_result["success"]
-                and
-                service_result["success"]
-            ),
-
-        "product":
-            product_result,
-
-        "service":
-            service_result,
-
-    }
-
-
-# ==========================================================
-# END OF LIBRARY STORAGE ENGINE
-# ==========================================================
+ensure_data_directory()
