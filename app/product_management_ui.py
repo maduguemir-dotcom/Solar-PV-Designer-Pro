@@ -1,320 +1,992 @@
-"""
-Solar PV Designer Pro Africa™ - Product Management UI
-
-Management layer on top of the existing product_ui.py.
-Keeps product_engine.py and library_store.py untouched.
-"""
-
-import inspect
 import streamlit as st
+from copy import deepcopy
 
-try:
-    import product_ui as _product_ui
-    _IMPORT_ERROR = None
-except Exception as exc:
-    _product_ui = None
-    _IMPORT_ERROR = exc
+from library_store import (
+    load_product_library,
+    save_product_library,
+)
 
-CATEGORIES = [
-    "Solar Panel", "Battery", "Inverter", "Charge Controller",
-    "Mounting Structure", "Solar Cable", "Protection",
-    "Labour & Services", "Transport & Logistics", "Other",
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+PRODUCT_CATEGORIES = [
+    "Solar Panel",
+    "Battery",
+    "Inverter",
+    "Charge Controller",
+    "Mounting Structure",
+    "Solar Cable",
+    "Protection",
+    "Other",
 ]
 
-ICONS = {
-    "Solar Panel": "☀️", "Battery": "🔋", "Inverter": "⚡",
-    "Charge Controller": "🔌", "Mounting Structure": "🏗️",
-    "Solar Cable": "🔗", "Protection": "🛡️",
-    "Labour & Services": "🔧", "Transport & Logistics": "🚚",
-    "Other": "📦",
-}
+CURRENCIES = [
+    "USD",
+    "UGX",
+    "NGN",
+    "EUR",
+    "GBP",
+    "Other",
+]
 
-FIELDS = {
-    "Solar Panel": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Technology","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("rated_power_w","Rated Power (W)","number"),("voltage_v","Nominal Voltage (V)","number"),
-        ("voc_v","Voc (V)","number"),("vmp_v","Vmp (V)","number"),
-        ("isc_a","Isc (A)","number"),("imp_a","Imp (A)","number"),
-        ("efficiency_percent","Efficiency (%)","number"),
-        ("max_system_voltage_v","Maximum System Voltage (V)","number"),
-        ("max_series_fuse_a","Maximum Series Fuse (A)","number"),
-        ("length_mm","Length (mm)","number"),("width_mm","Width (mm)","number"),
-        ("thickness_mm","Thickness (mm)","number"),("weight_kg","Weight (kg)","number"),
-        ("cell_count","Cell Count","number"),("cell_technology","Cell Technology","text"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Battery": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Technology","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("voltage_v","Nominal Voltage (V)","number"),("capacity_ah","Capacity (Ah)","number"),
-        ("energy_kwh","Energy (kWh)","number"),("dod_percent","Depth of Discharge (%)","number"),
-        ("efficiency_percent","Efficiency (%)","number"),("cycle_life","Cycle Life","number"),
-        ("max_charge_current_a","Maximum Charge Current (A)","number"),
-        ("max_discharge_current_a","Maximum Discharge Current (A)","number"),
-        ("warranty_years","Warranty (years)","number"),("price","Unit Price","number"),
-        ("currency","Currency","text"),("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Inverter": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Technology","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("rated_power_w","Rated Power (W)","number"),("surge_power_w","Surge Power (W)","number"),
-        ("voltage_v","Battery / DC Voltage (V)","number"),("efficiency_percent","Efficiency (%)","number"),
-        ("mppt_voltage_min_v","MPPT Minimum Voltage (V)","number"),
-        ("mppt_voltage_max_v","MPPT Maximum Voltage (V)","number"),
-        ("max_pv_power_w","Maximum PV Input (W)","number"),
-        ("max_pv_current_a","Maximum PV Current (A)","number"),
-        ("phase","Phase","text"),("warranty_years","Warranty (years)","number"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Charge Controller": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Technology","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("rated_current_a","Rated Current (A)","number"),("voltage_v","Battery Voltage (V)","number"),
-        ("max_pv_voltage_v","Maximum PV Voltage (V)","number"),
-        ("max_pv_power_w","Maximum PV Power (W)","number"),
-        ("efficiency_percent","Efficiency (%)","number"),("warranty_years","Warranty (years)","number"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Mounting Structure": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Structure Type","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("material","Material","text"),("module_capacity","Module Capacity","number"),
-        ("roof_type","Roof / Ground Type","text"),("price","Unit Price","number"),
-        ("currency","Currency","text"),("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Solar Cable": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Cable Type","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("cross_section_mm2","Cross-section (mm²)","number"),
-        ("voltage_rating_v","Voltage Rating (V)","number"),
-        ("current_rating_a","Current Rating (A)","number"),("length_m","Length (m)","number"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Protection": [
-        ("name","Product Name","text"),("manufacturer","Manufacturer","text"),
-        ("model","Model","text"),("technology","Protection Type","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("rated_current_a","Rated Current (A)","number"),("voltage_v","Voltage (V)","number"),
-        ("poles","Poles","number"),("breaking_capacity_ka","Breaking Capacity (kA)","number"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Labour & Services": [
-        ("name","Service Name","text"),("manufacturer","Provider / Company","text"),
-        ("model","Service Code","text"),("technology","Service Type","text"),
-        ("supplier","Supplier / Contractor","text"),("country","Country","text"),
-        ("unit","Billing Unit","text"),("price","Unit Cost","number"),
-        ("currency","Currency","text"),("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Transport & Logistics": [
-        ("name","Service Name","text"),("manufacturer","Provider / Company","text"),
-        ("model","Service Code","text"),("technology","Transport Type","text"),
-        ("supplier","Transporter","text"),("country","Country","text"),
-        ("distance_km","Distance (km)","number"),("unit","Billing Unit","text"),
-        ("price","Unit Cost","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-    "Other": [
-        ("name","Product / Item Name","text"),("manufacturer","Manufacturer / Provider","text"),
-        ("model","Model / Code","text"),("technology","Type","text"),
-        ("supplier","Supplier","text"),("country","Country","text"),
-        ("price","Unit Price","number"),("currency","Currency","text"),
-        ("quantity","Quantity","number"),("notes","Notes","textarea"),
-    ],
-}
 
-def _fn(name):
-    return getattr(_product_ui, name, None) if _product_ui else None
+# ============================================================
+# SAFE CONVERSION FUNCTIONS
+# ============================================================
 
-def _call(fn, **kwargs):
-    if fn is None:
-        raise RuntimeError("Required function is unavailable in product_ui.py.")
+def safe_float(value, default=0.0):
+    """Safely convert a value to float."""
     try:
-        sig = inspect.signature(fn)
-        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-            return fn(**kwargs)
-        return fn(**{k:v for k,v in kwargs.items() if k in sig.parameters})
+        if value is None or value == "":
+            return default
+        return float(value)
     except (TypeError, ValueError):
-        return fn(**kwargs)
+        return default
+
+
+def safe_int(value, default=0):
+    """Safely convert a value to integer."""
+    try:
+        if value is None or value == "":
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+# ============================================================
+# PRODUCT ACCESS FUNCTIONS
+# ============================================================
 
 def get_products():
-    fn = _fn("get_products")
-    if not fn:
-        return []
-    result = _call(fn)
-    if result is None:
-        return []
-    if isinstance(result, dict):
-        return result.get("products", [result])
-    return list(result)
+    """Load all products from the persistent product library."""
+    products = load_product_library()
 
-def _id(p):
-    for k in ("id","product_id","productId","ID"):
-        if p.get(k) is not None:
-            return p[k]
+    if not isinstance(products, list):
+        return []
+
+    return products
+
+
+def get_product_index(products, selected_product):
+    """
+    Find the index of a selected product.
+
+    Uses ID when available, otherwise falls back to
+    matching name/category/model.
+    """
+
+    selected_id = selected_product.get("id")
+
+    if selected_id:
+
+        for index, product in enumerate(products):
+
+            if product.get("id") == selected_id:
+                return index
+
+    for index, product in enumerate(products):
+
+        if (
+            product.get("name") == selected_product.get("name")
+            and product.get("category") == selected_product.get("category")
+            and product.get("model") == selected_product.get("model")
+        ):
+            return index
+
     return None
 
-def _name(p):
-    return str(p.get("name") or p.get("product_name") or p.get("productName") or "Unnamed Product")
 
-def _category(p):
-    c = str(p.get("category") or p.get("product_category") or "Other")
-    return c if c in CATEGORIES else "Other"
+# ============================================================
+# DELETE PRODUCT
+# ============================================================
 
-def update_existing_product(product_id, values):
-    fn = _fn("update_product")
-    if not fn:
-        return {"success": False, "message": "update_product() is unavailable in product_ui.py."}
-    try:
-        result = _call(fn, product_id=product_id, id=product_id, **values)
-        return result if isinstance(result, dict) else {"success": True, "message": "Product updated successfully."}
-    except Exception as exc:
-        return {"success": False, "message": str(exc)}
-
-def delete_existing_product(product_id):
-    fn = _fn("delete_product")
-    if not fn:
-        return {"success": False, "message": "delete_product() is unavailable in product_ui.py."}
-    try:
-        result = _call(fn, product_id=product_id, id=product_id)
-        return result if isinstance(result, dict) else {"success": True, "message": "Product deleted successfully."}
-    except Exception as exc:
-        return {"success": False, "message": str(exc)}
-
-def _edit_form(product):
-    category = _category(product)
-    values = {"category": category}
-    left, right = st.columns(2)
-    for i,(field,label,kind) in enumerate(FIELDS[category]):
-        with (left if i % 2 == 0 else right):
-            value = product.get(field)
-            key = f"pm_{_id(product)}_{field}"
-            if kind == "number":
-                try: value = float(value or 0)
-                except Exception: value = 0.0
-                values[field] = st.number_input(label, value=value, step=0.01, key=key)
-            elif kind == "textarea":
-                values[field] = st.text_area(label, value=str(value or ""), key=key)
-            else:
-                values[field] = st.text_input(label, value=str(value or ""), key=key)
-    return values
-
-def _details(product):
-    category = _category(product)
-    st.markdown(f"### {ICONS.get(category,'📦')} {_name(product)}")
-    st.caption(f"Category: {category} | ID: {_id(product)}")
-    rows = []
-    for field,label,_kind in FIELDS[category]:
-        if field in product:
-            rows.append({"Field": label, "Value": product[field]})
-    if rows:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-    else:
-        st.json(product)
-
-def display_product_management_ui():
-    if _IMPORT_ERROR:
-        st.error("product_ui.py could not be imported.")
-        st.exception(_IMPORT_ERROR)
-        return
-
-    st.title("🧰 Product Library Management")
-    st.caption("Edit, inspect and safely delete records from the existing product library.")
+def delete_existing_product(selected_product):
+    """
+    Delete a product from the persistent library.
+    """
 
     products = get_products()
+
+    product_index = get_product_index(
+        products,
+        selected_product,
+    )
+
+    if product_index is None:
+
+        return {
+            "success": False,
+            "message": "Product could not be found.",
+        }
+
+    deleted_product = products.pop(product_index)
+
+    save_product_library(products)
+
+    return {
+        "success": True,
+        "message": (
+            f"Product '{deleted_product.get('name')}' "
+            "was deleted successfully."
+        ),
+    }
+
+
+# ============================================================
+# UPDATE PRODUCT
+# ============================================================
+
+def update_existing_product(
+    selected_product,
+    updated_data,
+):
+    """
+    Update an existing product and save the changes permanently.
+    """
+
+    products = get_products()
+
+    product_index = get_product_index(
+        products,
+        selected_product,
+    )
+
+    if product_index is None:
+
+        return {
+            "success": False,
+            "message": "Product could not be found.",
+        }
+
+    updated_product = deepcopy(products[product_index])
+
+    updated_product.update(updated_data)
+
+    products[product_index] = updated_product
+
+    save_product_library(products)
+
+    return {
+        "success": True,
+        "message": (
+            f"Product '{updated_product.get('name')}' "
+            "was updated successfully."
+        ),
+        "product": updated_product,
+    }
+
+
+# ============================================================
+# PRODUCT INSPECTION
+# ============================================================
+
+def display_product_information(product):
+    """Display complete information about a product."""
+
+    st.markdown("### 📋 Product Information")
+
+    basic_data = {
+        "Name": product.get("name", ""),
+        "Category": product.get("category", ""),
+        "Manufacturer": product.get("manufacturer", ""),
+        "Model": product.get("model", ""),
+        "Technology": product.get("technology", ""),
+    }
+
+    st.json(basic_data)
+
+    st.markdown("### ⚙️ Technical Specifications")
+
+    technical_data = {
+        key: value
+        for key, value in product.items()
+        if key not in [
+            "id",
+            "name",
+            "category",
+            "manufacturer",
+            "model",
+            "technology",
+            "supplier",
+            "country",
+            "price",
+            "currency",
+            "quantity",
+            "notes",
+        ]
+    }
+
+    st.json(technical_data)
+
+    st.markdown("### 💰 Commercial Information")
+
+    commercial_data = {
+        "Supplier": product.get("supplier", ""),
+        "Country": product.get("country", ""),
+        "Price": product.get("price", 0),
+        "Currency": product.get("currency", "USD"),
+        "Quantity": product.get("quantity", 1),
+        "Notes": product.get("notes", ""),
+    }
+
+    st.json(commercial_data)
+
+
+# ============================================================
+# EDIT FORM
+# ============================================================
+
+def edit_product_form(selected_product):
+    """
+    Display a product editing form and return updated data.
+    """
+
+    product_id = selected_product.get(
+        "id",
+        selected_product.get("name", "product"),
+    )
+
+    st.markdown("## ✏️ Edit Product")
+
+    # --------------------------------------------------------
+    # BASIC INFORMATION
+    # --------------------------------------------------------
+
+    st.markdown("### Basic Information")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        name = st.text_input(
+            "Product Name *",
+            value=str(
+                selected_product.get("name", "")
+            ),
+            key=f"pm_name_{product_id}",
+        )
+
+        manufacturer = st.text_input(
+            "Manufacturer",
+            value=str(
+                selected_product.get(
+                    "manufacturer",
+                    "",
+                )
+            ),
+            key=f"pm_manufacturer_{product_id}",
+        )
+
+        model = st.text_input(
+            "Model",
+            value=str(
+                selected_product.get("model", "")
+            ),
+            key=f"pm_model_{product_id}",
+        )
+
+    with col2:
+
+        supplier = st.text_input(
+            "Supplier",
+            value=str(
+                selected_product.get(
+                    "supplier",
+                    "",
+                )
+            ),
+            key=f"pm_supplier_{product_id}",
+        )
+
+        country = st.text_input(
+            "Country",
+            value=str(
+                selected_product.get(
+                    "country",
+                    "",
+                )
+            ),
+            key=f"pm_country_{product_id}",
+        )
+
+        warranty_years = st.number_input(
+            "Warranty (Years)",
+            min_value=0,
+            value=safe_int(
+                selected_product.get(
+                    "warranty_years",
+                    0,
+                )
+            ),
+            step=1,
+            key=f"pm_warranty_{product_id}",
+        )
+
+    # --------------------------------------------------------
+    # CATEGORY
+    # --------------------------------------------------------
+
+    current_category = selected_product.get(
+        "category",
+        "Other",
+    )
+
+    if current_category not in PRODUCT_CATEGORIES:
+        current_category = "Other"
+
+    category = st.selectbox(
+        "Product Category",
+        PRODUCT_CATEGORIES,
+        index=PRODUCT_CATEGORIES.index(
+            current_category
+        ),
+        key=f"pm_category_{product_id}",
+    )
+
+    st.divider()
+
+    updated_data = {}
+
+    # ========================================================
+    # SOLAR PANEL
+    # ========================================================
+
+    if category == "Solar Panel":
+
+        technologies = [
+            "Monocrystalline",
+            "Polycrystalline",
+            "Thin Film",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other",
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Panel Technology",
+            technologies,
+            index=technologies.index(
+                current_technology
+            ),
+            key=f"pm_panel_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            rated_power_w = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "rated_power_w",
+                        0,
+                    )
+                ),
+                step=10.0,
+                key=f"pm_panel_power_{product_id}",
+            )
+
+        with col2:
+
+            voltage_v = st.number_input(
+                "Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                step=0.1,
+                key=f"pm_panel_voltage_{product_id}",
+            )
+
+        with col3:
+
+            current_a = st.number_input(
+                "Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "current_a",
+                        0,
+                    )
+                ),
+                step=0.1,
+                key=f"pm_panel_current_{product_id}",
+            )
+
+        efficiency_percent = st.number_input(
+            "Efficiency (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=safe_float(
+                selected_product.get(
+                    "efficiency_percent",
+                    0,
+                )
+            ),
+            step=0.1,
+            key=f"pm_panel_efficiency_{product_id}",
+        )
+
+        updated_data.update({
+            "technology": technology,
+            "rated_power_w": rated_power_w,
+            "voltage_v": voltage_v,
+            "current_a": current_a,
+            "efficiency_percent": efficiency_percent,
+        })
+
+    # ========================================================
+    # BATTERY
+    # ========================================================
+
+    elif category == "Battery":
+
+        technologies = [
+            "Lithium",
+            "LiFePO4",
+            "Lead Acid",
+            "AGM",
+            "Gel",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other",
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Battery Technology",
+            technologies,
+            index=technologies.index(
+                current_technology
+            ),
+            key=f"pm_battery_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            voltage_v = st.number_input(
+                "Nominal Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                step=0.1,
+                key=f"pm_battery_voltage_{product_id}",
+            )
+
+        with col2:
+
+            capacity_ah = st.number_input(
+                "Capacity (Ah)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "capacity_ah",
+                        0,
+                    )
+                ),
+                step=1.0,
+                key=f"pm_battery_capacity_{product_id}",
+            )
+
+        with col3:
+
+            energy_kwh = st.number_input(
+                "Energy Capacity (kWh)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "energy_kwh",
+                        0,
+                    )
+                ),
+                step=0.1,
+                key=f"pm_battery_energy_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "voltage_v": voltage_v,
+            "capacity_ah": capacity_ah,
+            "energy_kwh": energy_kwh,
+        })
+
+    # ========================================================
+    # INVERTER
+    # ========================================================
+
+    elif category == "Inverter":
+
+        technologies = [
+            "Hybrid",
+            "Off Grid",
+            "On Grid",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other",
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Inverter Type",
+            technologies,
+            index=technologies.index(
+                current_technology
+            ),
+            key=f"pm_inverter_technology_{product_id}",
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            rated_power_w = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "rated_power_w",
+                        0,
+                    )
+                ),
+                step=100.0,
+                key=f"pm_inverter_power_{product_id}",
+            )
+
+        with col2:
+
+            voltage_v = st.number_input(
+                "System Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                step=1.0,
+                key=f"pm_inverter_voltage_{product_id}",
+            )
+
+        with col3:
+
+            efficiency_percent = st.number_input(
+                "Efficiency (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    selected_product.get(
+                        "efficiency_percent",
+                        0,
+                    )
+                ),
+                step=0.1,
+                key=f"pm_inverter_efficiency_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "rated_power_w": rated_power_w,
+            "voltage_v": voltage_v,
+            "efficiency_percent": efficiency_percent,
+        })
+
+    # ========================================================
+    # CHARGE CONTROLLER
+    # ========================================================
+
+    elif category == "Charge Controller":
+
+        technologies = [
+            "MPPT",
+            "PWM",
+            "Other",
+        ]
+
+        current_technology = selected_product.get(
+            "technology",
+            "Other",
+        )
+
+        if current_technology not in technologies:
+            current_technology = "Other"
+
+        technology = st.selectbox(
+            "Controller Type",
+            technologies,
+            index=technologies.index(
+                current_technology
+            ),
+            key=f"pm_controller_technology_{product_id}",
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            voltage_v = st.number_input(
+                "System Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                step=1.0,
+                key=f"pm_controller_voltage_{product_id}",
+            )
+
+        with col2:
+
+            current_a = st.number_input(
+                "Rated Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    selected_product.get(
+                        "current_a",
+                        0,
+                    )
+                ),
+                step=1.0,
+                key=f"pm_controller_current_{product_id}",
+            )
+
+        updated_data.update({
+            "technology": technology,
+            "voltage_v": voltage_v,
+            "current_a": current_a,
+        })
+
+    # ========================================================
+    # OTHER COMPONENTS
+    # ========================================================
+
+    else:
+
+        technology = st.text_input(
+            "Technology / Type",
+            value=str(
+                selected_product.get(
+                    "technology",
+                    "",
+                )
+            ),
+            key=f"pm_technology_{product_id}",
+        )
+
+        updated_data["technology"] = technology
+
+    # --------------------------------------------------------
+    # COMMERCIAL INFORMATION
+    # --------------------------------------------------------
+
+    st.divider()
+
+    st.markdown("### 💰 Commercial Information")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        price = st.number_input(
+            "Unit Price",
+            min_value=0.0,
+            value=safe_float(
+                selected_product.get(
+                    "price",
+                    0,
+                )
+            ),
+            step=1.0,
+            key=f"pm_price_{product_id}",
+        )
+
+    with col2:
+
+        current_currency = selected_product.get(
+            "currency",
+            "USD",
+        )
+
+        if current_currency not in CURRENCIES:
+            current_currency = "USD"
+
+        currency = st.selectbox(
+            "Currency",
+            CURRENCIES,
+            index=CURRENCIES.index(
+                current_currency
+            ),
+            key=f"pm_currency_{product_id}",
+        )
+
+    with col3:
+
+        quantity = st.number_input(
+            "Quantity",
+            min_value=1,
+            value=max(
+                1,
+                safe_int(
+                    selected_product.get(
+                        "quantity",
+                        1,
+                    )
+                )
+            ),
+            step=1,
+            key=f"pm_quantity_{product_id}",
+        )
+
+    notes = st.text_area(
+        "Notes",
+        value=str(
+            selected_product.get(
+                "notes",
+                "",
+            )
+        ),
+        key=f"pm_notes_{product_id}",
+    )
+
+    # --------------------------------------------------------
+    # BUILD COMPLETE UPDATED DATA
+    # --------------------------------------------------------
+
+    updated_data.update({
+        "name": name.strip(),
+        "category": category,
+        "manufacturer": manufacturer.strip(),
+        "model": model.strip(),
+        "supplier": supplier.strip(),
+        "country": country.strip(),
+        "warranty_years": warranty_years,
+        "price": price,
+        "currency": currency,
+        "quantity": quantity,
+        "notes": notes.strip(),
+    })
+
+    return updated_data
+
+
+# ============================================================
+# MAIN MANAGEMENT INTERFACE
+# ============================================================
+
+def display_product_management_ui():
+    """
+    Main Product Management interface.
+    """
+
+    st.title("📦 Product Library Management")
+
+    st.write(
+        "Inspect, edit, update and safely delete "
+        "products from the persistent product library."
+    )
+
+    products = get_products()
+
     if not products:
-        st.info("No products found in the library.")
+
+        st.info(
+            "No products found in the library. "
+            "Add products using the Product Library first."
+        )
+
         return
 
-    st.metric("Products in Library", len(products))
+    # --------------------------------------------------------
+    # PRODUCT SELECTOR
+    # --------------------------------------------------------
 
-    edit_tab, delete_tab, details_tab = st.tabs(["✏️ Edit Product","🗑️ Delete Product","📋 Product Details"])
+    product_options = {}
 
-    with edit_tab:
-        c1,c2 = st.columns(2)
-        with c1:
-            category = st.selectbox("Category", ["All Categories"] + CATEGORIES, key="pm_edit_category")
-        with c2:
-            query = st.text_input("Search Product", key="pm_edit_search", placeholder="Name, manufacturer, model...")
+    for index, product in enumerate(products):
 
-        filtered = [p for p in products if category == "All Categories" or _category(p) == category]
-        if query.strip():
-            q=query.lower().strip()
-            filtered=[p for p in filtered if q in str(p).lower()]
+        label = (
+            f"{product.get('name', 'Unnamed Product')} "
+            f"| {product.get('category', 'Other')} "
+            f"| {product.get('manufacturer', '')}"
+        )
 
-        if not filtered:
-            st.warning("No matching products found.")
-        else:
-            labels=[f"{ICONS.get(_category(p),'📦')} {_name(p)} | {_category(p)} | ID {_id(p)}" for p in filtered]
-            idx=st.selectbox("Select Product", range(len(filtered)), format_func=lambda i:labels[i], key="pm_edit_select")
-            selected=filtered[idx]
-            st.divider()
-            st.markdown(f"### {ICONS.get(_category(selected),'📦')} {_category(selected)}")
-            values=_edit_form(selected)
-            if st.button("💾 Save Changes", type="primary", use_container_width=True, key="pm_save"):
-                pid=_id(selected)
-                if pid is None:
-                    st.error("Selected product has no database ID.")
+        # Prevent duplicate labels
+        if label in product_options:
+            label = f"{label} [{index + 1}]"
+
+        product_options[label] = product
+
+    selected_label = st.selectbox(
+        "Select a Product",
+        options=list(product_options.keys()),
+        key="product_management_selector",
+    )
+
+    selected_product = product_options[selected_label]
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # MANAGEMENT TABS
+    # --------------------------------------------------------
+
+    tab1, tab2, tab3 = st.tabs([
+        "👀 Inspect Product",
+        "✏️ Edit Product",
+        "🗑️ Delete Product",
+    ])
+
+    # ========================================================
+    # INSPECT
+    # ========================================================
+
+    with tab1:
+
+        display_product_information(
+            selected_product
+        )
+
+    # ========================================================
+    # EDIT
+    # ========================================================
+
+    with tab2:
+
+        updated_data = edit_product_form(
+            selected_product
+        )
+
+        st.divider()
+
+        if st.button(
+            "💾 Save Changes",
+            type="primary",
+            use_container_width=True,
+            key=(
+                f"save_product_"
+                f"{selected_product.get('id', selected_label)}"
+            ),
+        ):
+
+            if not updated_data.get("name"):
+
+                st.error(
+                    "Product name cannot be empty."
+                )
+
+            else:
+
+                result = update_existing_product(
+                    selected_product,
+                    updated_data,
+                )
+
+                if result.get("success"):
+
+                    st.success(
+                        result.get("message")
+                    )
+
+                    st.rerun()
+
                 else:
-                    result=update_existing_product(pid, values)
-                    if result.get("success",False):
-                        st.success(result.get("message","Product updated successfully."))
-                        st.rerun()
-                    else:
-                        st.error(result.get("message","Unable to update product."))
 
-    with delete_tab:
-        category=st.selectbox("Category", ["All Categories"] + CATEGORIES, key="pm_delete_category")
-        filtered=[p for p in products if category == "All Categories" or _category(p)==category]
-        if not filtered:
-            st.warning("No products found.")
-        else:
-            labels=[f"{ICONS.get(_category(p),'📦')} {_name(p)} | {_category(p)} | ID {_id(p)}" for p in filtered]
-            idx=st.selectbox("Select Product to Delete", range(len(filtered)), format_func=lambda i:labels[i], key="pm_delete_select")
-            selected=filtered[idx]
-            _details(selected)
-            confirm=st.checkbox("I understand this product will be permanently deleted.", key="pm_delete_confirm")
-            if st.button("🗑️ Permanently Delete Product", disabled=not confirm, use_container_width=True, key="pm_delete"):
-                pid=_id(selected)
-                if pid is None:
-                    st.error("Selected product has no database ID.")
-                else:
-                    result=delete_existing_product(pid)
-                    if result.get("success",False):
-                        st.success(result.get("message","Product deleted successfully."))
-                        st.rerun()
-                    else:
-                        st.error(result.get("message","Unable to delete product."))
+                    st.error(
+                        result.get("message")
+                    )
 
-    with details_tab:
-        category=st.selectbox("Category", ["All Categories"] + CATEGORIES, key="pm_details_category")
-        filtered=[p for p in products if category == "All Categories" or _category(p)==category]
-        if not filtered:
-            st.warning("No products found.")
-        else:
-            labels=[f"{ICONS.get(_category(p),'📦')} {_name(p)} | {_category(p)} | ID {_id(p)}" for p in filtered]
-            idx=st.selectbox("Select Product", range(len(filtered)), format_func=lambda i:labels[i], key="pm_details_select")
-            _details(filtered[idx])
+    # ========================================================
+    # DELETE
+    # ========================================================
 
-product_management_interface = display_product_management_ui
-display_management_ui = display_product_management_ui
+    with tab3:
 
-__all__ = [
-    "display_product_management_ui",
-    "product_management_interface",
-    "display_management_ui",
-    "get_products",
-    "update_existing_product",
-    "delete_existing_product",
-]
+        st.warning(
+            "⚠️ Deleting a product permanently removes "
+            "it from the product library."
+        )
+
+        confirm_delete = st.checkbox(
+            (
+                "I understand that this product "
+                "will be permanently deleted."
+            ),
+            key=(
+                f"confirm_delete_"
+                f"{selected_product.get('id', selected_label)}"
+            ),
+        )
+
+        if st.button(
+            "🗑️ Delete Product",
+            type="primary",
+            use_container_width=True,
+            disabled=not confirm_delete,
+            key=(
+                f"delete_product_"
+                f"{selected_product.get('id', selected_label)}"
+            ),
+        ):
+
+            result = delete_existing_product(
+                selected_product
+            )
+
+            if result.get("success"):
+
+                st.success(
+                    result.get("message")
+                )
+
+                st.rerun()
+
+            else:
+
+                st.error(
+                    result.get("message")
+                )
+
+
+# ============================================================
+# COMPATIBILITY ALIASES
+# ============================================================
+
+def display_management_ui():
+    """Compatibility alias."""
+    display_product_management_ui()
+
+
+def product_management_interface():
+    """Compatibility alias."""
+    display_product_management_ui()
