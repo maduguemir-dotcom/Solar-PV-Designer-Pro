@@ -1,9 +1,32 @@
-import streamlit as st
-from copy import deepcopy
+"""
+Solar PV Designer Pro Africa™
+Product Library Management Interface
 
-from library_store import (
-    load_product_library,
-    save_product_library,
+This module uses the SAME persistent product storage
+as product_ui.py.
+
+Storage flow:
+
+product_management_ui.py
+        ↓
+product_ui.py
+        ↓
+library_store.py
+        ↓
+app/data/product_library.json
+"""
+
+from copy import deepcopy
+import streamlit as st
+
+from product_ui import (
+    get_products,
+    get_product,
+    update_product,
+    delete_product,
+    normalize_product,
+    safe_float,
+    safe_int,
 )
 
 
@@ -22,6 +45,7 @@ PRODUCT_CATEGORIES = [
     "Other",
 ]
 
+
 CURRENCIES = [
     "USD",
     "UGX",
@@ -31,187 +55,130 @@ CURRENCIES = [
     "Other",
 ]
 
-TECHNOLOGIES = {
-    "Solar Panel": [
-        "Monocrystalline",
-        "Polycrystalline",
-        "Thin Film",
-        "Other",
-    ],
-    "Battery": [
-        "Lithium",
-        "LiFePO4",
-        "Lead Acid",
-        "AGM",
-        "Gel",
-        "Other",
-    ],
-    "Inverter": [
-        "Hybrid",
-        "Off Grid",
-        "On Grid",
-        "Other",
-    ],
-    "Charge Controller": [
-        "MPPT",
-        "PWM",
-        "Other",
-    ],
-}
-
 
 # ============================================================
-# HELPER FUNCTIONS
+# TECHNOLOGY OPTIONS
 # ============================================================
 
-def safe_float(value, default=0.0):
-    try:
-        if value is None or value == "":
-            return float(default)
-        return float(value)
-    except (ValueError, TypeError):
-        return float(default)
+def get_technology_options(category):
 
+    technologies = {
 
-def safe_int(value, default=0):
-    try:
-        if value is None or value == "":
-            return int(default)
-        return int(value)
-    except (ValueError, TypeError):
-        return int(default)
+        "Solar Panel": [
+            "Monocrystalline",
+            "Polycrystalline",
+            "Thin Film",
+            "Other",
+        ],
 
+        "Battery": [
+            "Lithium",
+            "LiFePO4",
+            "Lead Acid",
+            "AGM",
+            "Gel",
+            "Other",
+        ],
 
-def get_product_identifier(product, index):
-    product_id = product.get("id")
+        "Inverter": [
+            "Hybrid",
+            "Off Grid",
+            "On Grid",
+            "Other",
+        ],
 
-    if product_id not in [None, ""]:
-        return str(product_id)
+        "Charge Controller": [
+            "MPPT",
+            "PWM",
+            "Other",
+        ],
 
-    name = product.get("name", "Unnamed Product")
-    category = product.get("category", "Other")
+        "Mounting Structure": [
+            "Roof Mount",
+            "Ground Mount",
+            "Pole Mount",
+            "Carport",
+            "Other",
+        ],
 
-    return f"{index}_{name}_{category}"
+        "Solar Cable": [
+            "Solar Cable",
+            "DC Cable",
+            "AC Cable",
+            "Other",
+        ],
 
+        "Protection": [
+            "Circuit Breaker",
+            "Fuse",
+            "Surge Protection Device",
+            "Isolator",
+            "Other",
+        ],
 
-# ============================================================
-# PRODUCT DATA FUNCTIONS
-# ============================================================
-
-def get_products():
-    try:
-        products = load_product_library()
-
-        if products is None:
-            return []
-
-        if not isinstance(products, list):
-            return []
-
-        return products
-
-    except Exception as exc:
-        st.error(f"Unable to load products: {exc}")
-        return []
-
-
-def save_products(products):
-    try:
-        if not isinstance(products, list):
-            return False
-
-        save_product_library(products)
-
-        return True
-
-    except Exception as exc:
-        st.error(f"Unable to save products: {exc}")
-        return False
-
-
-# ============================================================
-# UPDATE PRODUCT
-# ============================================================
-
-def update_existing_product(product_identifier, updated_product):
-
-    products = get_products()
-
-    for index, product in enumerate(products):
-
-        identifier = get_product_identifier(
-            product,
-            index,
-        )
-
-        if identifier == product_identifier:
-
-            products[index] = deepcopy(updated_product)
-
-            if save_products(products):
-                return {
-                    "success": True,
-                    "message": "Product updated successfully.",
-                }
-
-            return {
-                "success": False,
-                "message": "Unable to save product changes.",
-            }
-
-    return {
-        "success": False,
-        "message": "Product not found.",
+        "Other": [
+            "Other",
+        ],
     }
 
-
-# ============================================================
-# DELETE PRODUCT
-# ============================================================
-
-def delete_existing_product(product_identifier):
-
-    products = get_products()
-
-    new_products = []
-
-    deleted = False
-
-    for index, product in enumerate(products):
-
-        identifier = get_product_identifier(
-            product,
-            index,
-        )
-
-        if identifier == product_identifier:
-            deleted = True
-        else:
-            new_products.append(product)
-
-    if not deleted:
-        return {
-            "success": False,
-            "message": "Product not found.",
-        }
-
-    if save_products(new_products):
-        return {
-            "success": True,
-            "message": "Product deleted successfully.",
-        }
-
-    return {
-        "success": False,
-        "message": "Unable to delete product.",
-    }
+    return technologies.get(
+        category,
+        ["Other"],
+    )
 
 
 # ============================================================
-# DISPLAY PRODUCT DETAILS
+# PRODUCT LABEL
+# ============================================================
+
+def product_label(product, index):
+
+    product = normalize_product(product)
+
+    name = product.get(
+        "name",
+        "Unnamed Product",
+    )
+
+    category = product.get(
+        "category",
+        "Other",
+    )
+
+    manufacturer = product.get(
+        "manufacturer",
+        "",
+    )
+
+    product_id = product.get(
+        "id",
+        "",
+    )
+
+    return (
+        f"{index + 1}. "
+        f"{name} | "
+        f"{category} | "
+        f"{manufacturer} | "
+        f"ID: {product_id}"
+    )
+
+
+# ============================================================
+# PRODUCT DETAILS
 # ============================================================
 
 def display_product_details(product):
+
+    if not product:
+
+        st.warning(
+            "No product selected."
+        )
+
+        return
+
+    product = normalize_product(product)
 
     st.subheader(
         product.get(
@@ -220,115 +187,157 @@ def display_product_details(product):
         )
     )
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
 
         st.write(
-            f"**Category:** "
-            f"{product.get('category', 'Other')}"
+            "**Category**"
         )
 
         st.write(
-            f"**Manufacturer:** "
-            f"{product.get('manufacturer', '')}"
+            product.get(
+                "category",
+                "Other",
+            )
         )
 
         st.write(
-            f"**Model:** "
-            f"{product.get('model', '')}"
+            "**Manufacturer**"
         )
 
         st.write(
-            f"**Technology:** "
-            f"{product.get('technology', '')}"
+            product.get(
+                "manufacturer",
+                "—",
+            )
+            or "—"
         )
 
         st.write(
-            f"**Supplier:** "
-            f"{product.get('supplier', '')}"
+            "**Model**"
+        )
+
+        st.write(
+            product.get(
+                "model",
+                "—",
+            )
+            or "—"
         )
 
     with col2:
 
         st.write(
-            f"**Country:** "
-            f"{product.get('country', '')}"
+            "**Technology**"
         )
 
         st.write(
-            f"**Warranty:** "
+            product.get(
+                "technology",
+                "—",
+            )
+            or "—"
+        )
+
+        st.write(
+            "**Supplier**"
+        )
+
+        st.write(
+            product.get(
+                "supplier",
+                "—",
+            )
+            or "—"
+        )
+
+        st.write(
+            "**Country**"
+        )
+
+        st.write(
+            product.get(
+                "country",
+                "—",
+            )
+            or "—"
+        )
+
+    with col3:
+
+        st.write(
+            "**Price**"
+        )
+
+        price = safe_float(
+            product.get(
+                "price",
+                0,
+            )
+        )
+
+        currency = product.get(
+            "currency",
+            "USD",
+        )
+
+        st.write(
+            f"{currency} {price:,.2f}"
+        )
+
+        st.write(
+            "**Quantity**"
+        )
+
+        st.write(
+            product.get(
+                "quantity",
+                1,
+            )
+        )
+
+        st.write(
+            "**Warranty**"
+        )
+
+        st.write(
             f"{product.get('warranty_years', 0)} years"
         )
 
-        st.write(
-            f"**Rated Power:** "
-            f"{product.get('rated_power_w', 0)} W"
-        )
-
-        st.write(
-            f"**Voltage:** "
-            f"{product.get('voltage_v', 0)} V"
-        )
-
-        st.write(
-            f"**Current:** "
-            f"{product.get('current_a', 0)} A"
-        )
-
     st.divider()
 
-    st.subheader("Battery / Energy Information")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "Capacity",
-        f"{product.get('capacity_ah', 0)} Ah",
+    st.subheader(
+        "Technical Specifications"
     )
 
-    col2.metric(
-        "Energy",
-        f"{product.get('energy_kwh', 0)} kWh",
-    )
+    specifications = {}
 
-    col3.metric(
-        "Efficiency",
-        f"{product.get('efficiency_percent', 0)} %",
-    )
+    for key, value in product.items():
 
-    st.divider()
+        if key not in [
+            "id",
+            "name",
+            "category",
+            "manufacturer",
+            "model",
+            "technology",
+            "supplier",
+            "country",
+            "price",
+            "currency",
+            "quantity",
+            "warranty_years",
+            "notes",
+        ]:
 
-    price = safe_float(
-        product.get("price", 0)
-    )
+            specifications[key] = value
 
-    quantity = safe_int(
-        product.get("quantity", 1),
-        1,
-    )
+    if specifications:
 
-    currency = product.get(
-        "currency",
-        "USD",
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "Unit Price",
-        f"{price:,.2f} {currency}",
-    )
-
-    col2.metric(
-        "Quantity",
-        quantity,
-    )
-
-    col3.metric(
-        "Total Value",
-        f"{price * quantity:,.2f} {currency}",
-    )
+        st.json(
+            specifications
+        )
 
     notes = product.get(
         "notes",
@@ -336,8 +345,13 @@ def display_product_details(product):
     )
 
     if notes:
+
         st.divider()
-        st.subheader("Notes")
+
+        st.subheader(
+            "Notes"
+        )
+
         st.write(notes)
 
 
@@ -345,16 +359,44 @@ def display_product_details(product):
 # EDIT PRODUCT FORM
 # ============================================================
 
-def update_product_form(product, product_identifier):
+def update_existing_product(
+    product_id,
+    updated_data,
+):
 
-    product = deepcopy(product)
+    try:
 
-    unique_id = (
-        product.get("id")
-        or product_identifier
+        result = update_product(
+            product_id,
+            updated_data,
+        )
+
+        return result
+
+    except Exception as exc:
+
+        return {
+            "success": False,
+            "message": str(exc),
+        }
+
+
+def edit_product_form(product):
+
+    product = normalize_product(
+        deepcopy(product)
     )
 
-    st.subheader("✏️ Edit Product")
+    product_id = str(
+        product.get(
+            "id",
+            "",
+        )
+    )
+
+    st.subheader(
+        "✏️ Edit Product"
+    )
 
     # --------------------------------------------------------
     # BASIC INFORMATION
@@ -365,11 +407,14 @@ def update_product_form(product, product_identifier):
     with col1:
 
         name = st.text_input(
-            "Product Name",
+            "Product Name *",
             value=str(
-                product.get("name", "")
+                product.get(
+                    "name",
+                    "",
+                )
             ),
-            key=f"name_{unique_id}",
+            key=f"edit_name_{product_id}",
         )
 
         manufacturer = st.text_input(
@@ -380,7 +425,7 @@ def update_product_form(product, product_identifier):
                     "",
                 )
             ),
-            key=f"manufacturer_{unique_id}",
+            key=f"edit_manufacturer_{product_id}",
         )
 
         model = st.text_input(
@@ -391,7 +436,7 @@ def update_product_form(product, product_identifier):
                     "",
                 )
             ),
-            key=f"model_{unique_id}",
+            key=f"edit_model_{product_id}",
         )
 
     with col2:
@@ -404,7 +449,7 @@ def update_product_form(product, product_identifier):
                     "",
                 )
             ),
-            key=f"supplier_{unique_id}",
+            key=f"edit_supplier_{product_id}",
         )
 
         country = st.text_input(
@@ -415,19 +460,20 @@ def update_product_form(product, product_identifier):
                     "",
                 )
             ),
-            key=f"country_{unique_id}",
+            key=f"edit_country_{product_id}",
         )
 
         warranty_years = st.number_input(
             "Warranty Years",
             min_value=0,
+            step=1,
             value=safe_int(
                 product.get(
                     "warranty_years",
                     0,
                 )
             ),
-            key=f"warranty_{unique_id}",
+            key=f"edit_warranty_{product_id}",
         )
 
     # --------------------------------------------------------
@@ -440,6 +486,7 @@ def update_product_form(product, product_identifier):
     )
 
     if current_category not in PRODUCT_CATEGORIES:
+
         current_category = "Other"
 
     category = st.selectbox(
@@ -448,12 +495,13 @@ def update_product_form(product, product_identifier):
         index=PRODUCT_CATEGORIES.index(
             current_category
         ),
-        key=f"category_{unique_id}",
+        key=f"edit_category_{product_id}",
     )
 
-    technology_options = TECHNOLOGIES.get(
-        category,
-        ["Other"],
+    technology_options = (
+        get_technology_options(
+            category
+        )
     )
 
     current_technology = product.get(
@@ -462,7 +510,10 @@ def update_product_form(product, product_identifier):
     )
 
     if current_technology not in technology_options:
-        current_technology = technology_options[0]
+
+        current_technology = (
+            technology_options[0]
+        )
 
     technology = st.selectbox(
         "Technology",
@@ -470,14 +521,18 @@ def update_product_form(product, product_identifier):
         index=technology_options.index(
             current_technology
         ),
-        key=f"technology_{unique_id}",
+        key=f"edit_technology_{product_id}",
     )
 
     st.divider()
 
-    # --------------------------------------------------------
-    # TECHNICAL VALUES
-    # --------------------------------------------------------
+    # ========================================================
+    # CATEGORY-SPECIFIC EDITING
+    # ========================================================
+
+    st.subheader(
+        f"{category} Specifications"
+    )
 
     rated_power_w = safe_float(
         product.get(
@@ -521,9 +576,11 @@ def update_product_form(product, product_identifier):
         )
     )
 
-    st.subheader(
-        f"{category} Specifications"
-    )
+    extra_fields = {}
+
+    # --------------------------------------------------------
+    # SOLAR PANEL
+    # --------------------------------------------------------
 
     if category == "Solar Panel":
 
@@ -535,7 +592,7 @@ def update_product_form(product, product_identifier):
                 "Rated Power (W)",
                 min_value=0.0,
                 value=rated_power_w,
-                key=f"power_{unique_id}",
+                key=f"edit_power_{product_id}",
             )
 
         with col2:
@@ -544,7 +601,7 @@ def update_product_form(product, product_identifier):
                 "Voltage (V)",
                 min_value=0.0,
                 value=voltage_v,
-                key=f"voltage_{unique_id}",
+                key=f"edit_voltage_{product_id}",
             )
 
         with col3:
@@ -553,7 +610,7 @@ def update_product_form(product, product_identifier):
                 "Current (A)",
                 min_value=0.0,
                 value=current_a,
-                key=f"current_{unique_id}",
+                key=f"edit_current_{product_id}",
             )
 
         efficiency_percent = st.number_input(
@@ -561,8 +618,12 @@ def update_product_form(product, product_identifier):
             min_value=0.0,
             max_value=100.0,
             value=efficiency_percent,
-            key=f"efficiency_{unique_id}",
+            key=f"edit_efficiency_{product_id}",
         )
+
+    # --------------------------------------------------------
+    # BATTERY
+    # --------------------------------------------------------
 
     elif category == "Battery":
 
@@ -571,10 +632,10 @@ def update_product_form(product, product_identifier):
         with col1:
 
             voltage_v = st.number_input(
-                "Voltage (V)",
+                "Nominal Voltage (V)",
                 min_value=0.0,
                 value=voltage_v,
-                key=f"voltage_{unique_id}",
+                key=f"edit_battery_voltage_{product_id}",
             )
 
         with col2:
@@ -583,17 +644,21 @@ def update_product_form(product, product_identifier):
                 "Capacity (Ah)",
                 min_value=0.0,
                 value=capacity_ah,
-                key=f"capacity_{unique_id}",
+                key=f"edit_capacity_{product_id}",
             )
 
         with col3:
 
             energy_kwh = st.number_input(
-                "Energy (kWh)",
+                "Energy Capacity (kWh)",
                 min_value=0.0,
                 value=energy_kwh,
-                key=f"energy_{unique_id}",
+                key=f"edit_energy_{product_id}",
             )
+
+    # --------------------------------------------------------
+    # INVERTER
+    # --------------------------------------------------------
 
     elif category == "Inverter":
 
@@ -605,16 +670,16 @@ def update_product_form(product, product_identifier):
                 "Rated Power (W)",
                 min_value=0.0,
                 value=rated_power_w,
-                key=f"power_{unique_id}",
+                key=f"edit_inverter_power_{product_id}",
             )
 
         with col2:
 
             voltage_v = st.number_input(
-                "Voltage (V)",
+                "System Voltage (V)",
                 min_value=0.0,
                 value=voltage_v,
-                key=f"voltage_{unique_id}",
+                key=f"edit_inverter_voltage_{product_id}",
             )
 
         with col3:
@@ -624,8 +689,12 @@ def update_product_form(product, product_identifier):
                 min_value=0.0,
                 max_value=100.0,
                 value=efficiency_percent,
-                key=f"efficiency_{unique_id}",
+                key=f"edit_inverter_efficiency_{product_id}",
             )
+
+    # --------------------------------------------------------
+    # CHARGE CONTROLLER
+    # --------------------------------------------------------
 
     elif category == "Charge Controller":
 
@@ -637,7 +706,7 @@ def update_product_form(product, product_identifier):
                 "System Voltage (V)",
                 min_value=0.0,
                 value=voltage_v,
-                key=f"voltage_{unique_id}",
+                key=f"edit_controller_voltage_{product_id}",
             )
 
         with col2:
@@ -646,8 +715,65 @@ def update_product_form(product, product_identifier):
                 "Rated Current (A)",
                 min_value=0.0,
                 value=current_a,
-                key=f"current_{unique_id}",
+                key=f"edit_controller_current_{product_id}",
             )
+
+    # --------------------------------------------------------
+    # SOLAR CABLE
+    # --------------------------------------------------------
+
+    elif category == "Solar Cable":
+
+        conductor_area_mm2 = st.number_input(
+            "Conductor Area (mm²)",
+            min_value=0.0,
+            value=safe_float(
+                product.get(
+                    "conductor_area_mm2",
+                    0,
+                )
+            ),
+            key=f"edit_cable_area_{product_id}",
+        )
+
+        voltage_v = st.number_input(
+            "Voltage Rating (V)",
+            min_value=0.0,
+            value=voltage_v,
+            key=f"edit_cable_voltage_{product_id}",
+        )
+
+        current_a = st.number_input(
+            "Current Rating (A)",
+            min_value=0.0,
+            value=current_a,
+            key=f"edit_cable_current_{product_id}",
+        )
+
+        extra_fields[
+            "conductor_area_mm2"
+        ] = conductor_area_mm2
+
+    # --------------------------------------------------------
+    # MOUNTING STRUCTURE
+    # --------------------------------------------------------
+
+    elif category == "Mounting Structure":
+
+        material = st.text_input(
+            "Material",
+            value=str(
+                product.get(
+                    "material",
+                    "",
+                )
+            ),
+            key=f"edit_material_{product_id}",
+        )
+
+        extra_fields[
+            "material"
+        ] = material
 
     # --------------------------------------------------------
     # COMMERCIAL INFORMATION
@@ -655,7 +781,9 @@ def update_product_form(product, product_identifier):
 
     st.divider()
 
-    st.subheader("Commercial Information")
+    st.subheader(
+        "Commercial Information"
+    )
 
     col1, col2, col3 = st.columns(3)
 
@@ -670,7 +798,7 @@ def update_product_form(product, product_identifier):
                     0,
                 )
             ),
-            key=f"price_{unique_id}",
+            key=f"edit_price_{product_id}",
         )
 
     with col2:
@@ -681,6 +809,7 @@ def update_product_form(product, product_identifier):
         )
 
         if current_currency not in CURRENCIES:
+
             current_currency = "USD"
 
         currency = st.selectbox(
@@ -689,7 +818,7 @@ def update_product_form(product, product_identifier):
             index=CURRENCIES.index(
                 current_currency
             ),
-            key=f"currency_{unique_id}",
+            key=f"edit_currency_{product_id}",
         )
 
     with col3:
@@ -697,6 +826,7 @@ def update_product_form(product, product_identifier):
         quantity = st.number_input(
             "Quantity",
             min_value=1,
+            step=1,
             value=max(
                 1,
                 safe_int(
@@ -707,7 +837,7 @@ def update_product_form(product, product_identifier):
                     1,
                 )
             ),
-            key=f"quantity_{unique_id}",
+            key=f"edit_quantity_{product_id}",
         )
 
     notes = st.text_area(
@@ -718,88 +848,159 @@ def update_product_form(product, product_identifier):
                 "",
             )
         ),
-        key=f"notes_{unique_id}",
+        key=f"edit_notes_{product_id}",
     )
 
+    st.divider()
+
     # --------------------------------------------------------
-    # SAVE BUTTON
+    # SAVE CHANGES
     # --------------------------------------------------------
 
     if st.button(
         "💾 Save Changes",
         type="primary",
         use_container_width=True,
-        key=f"save_{unique_id}",
+        key=f"save_product_{product_id}",
     ):
 
         if not name.strip():
 
             st.error(
-                "Product name cannot be empty."
+                "Product name is required."
             )
 
             return
 
-        updated_product = deepcopy(product)
+        updated_data = deepcopy(
+            product
+        )
 
-        updated_product.update({
+        updated_data.update({
+
             "name": name.strip(),
-            "manufacturer": manufacturer.strip(),
-            "model": model.strip(),
+
             "category": category,
+
+            "manufacturer": (
+                manufacturer.strip()
+            ),
+
+            "model": model.strip(),
+
             "technology": technology,
+
             "supplier": supplier.strip(),
+
             "country": country.strip(),
-            "warranty_years": warranty_years,
-            "rated_power_w": rated_power_w,
+
+            "warranty_years": (
+                warranty_years
+            ),
+
+            "rated_power_w": (
+                rated_power_w
+            ),
+
             "voltage_v": voltage_v,
+
             "current_a": current_a,
+
             "capacity_ah": capacity_ah,
+
             "energy_kwh": energy_kwh,
-            "efficiency_percent": efficiency_percent,
+
+            "efficiency_percent": (
+                efficiency_percent
+            ),
+
             "price": price,
+
             "currency": currency,
+
             "quantity": quantity,
+
             "notes": notes.strip(),
         })
 
-        result = update_existing_product(
-            product_identifier,
-            updated_product,
+        updated_data.update(
+            extra_fields
         )
 
-        if result["success"]:
+        result = update_existing_product(
+            product_id,
+            updated_data,
+        )
+
+        if isinstance(result, dict):
+
+            if result.get("success"):
+
+                st.success(
+                    "Product updated successfully."
+                )
+
+                st.rerun()
+
+            else:
+
+                st.error(
+                    result.get(
+                        "message",
+                        "Unable to update product.",
+                    )
+                )
+
+        else:
 
             st.success(
-                result["message"]
+                "Product updated successfully."
             )
 
             st.rerun()
 
-        else:
 
-            st.error(
-                result["message"]
-            )
+# ============================================================
+# DELETE PRODUCT
+# ============================================================
+
+def delete_existing_product(product_id):
+
+    try:
+
+        result = delete_product(
+            product_id
+        )
+
+        return result
+
+    except Exception as exc:
+
+        return {
+            "success": False,
+            "message": str(exc),
+        }
 
 
 # ============================================================
-# MAIN MANAGEMENT INTERFACE
+# MAIN MANAGEMENT UI
 # ============================================================
 
 def product_management_interface():
 
-    st.title("🛠️ Product Library Management")
+    st.title(
+        "🛠️ Product Library Management"
+    )
 
     st.write(
-        "Inspect, edit and delete products "
-        "from your persistent product library."
+        "Inspect, edit and safely delete products "
+        "from your Solar PV Product Library."
     )
 
     products = get_products()
 
     st.caption(
-        f"Products loaded: {len(products)}"
+        f"Products available: {len(products)}"
     )
 
     if not products:
@@ -808,53 +1009,69 @@ def product_management_interface():
             "No products found in the library."
         )
 
+        st.warning(
+            "Please add products through the "
+            "Product Library interface first."
+        )
+
         return
 
     st.divider()
+
+    # --------------------------------------------------------
+    # BUILD PRODUCT SELECTION
+    # --------------------------------------------------------
 
     product_options = {}
 
     for index, product in enumerate(products):
 
-        identifier = get_product_identifier(
+        product = normalize_product(
+            product
+        )
+
+        label = product_label(
             product,
             index,
         )
 
-        label = (
-            f"{index + 1}. "
-            f"{product.get('name', 'Unnamed Product')} "
-            f"({product.get('category', 'Other')})"
+        product_options[label] = (
+            product
         )
 
-        product_options[label] = {
-            "product": product,
-            "identifier": identifier,
-        }
-
     selected_label = st.selectbox(
-        "Select Product",
-        list(product_options.keys()),
-        key="product_management_selector",
+        "Select Product to Manage",
+        options=list(
+            product_options.keys()
+        ),
+        key="management_product_selector",
     )
 
-    selected_data = product_options[
+    selected_product = product_options[
         selected_label
     ]
 
-    selected_product = selected_data[
-        "product"
-    ]
+    product_id = selected_product.get(
+        "id"
+    )
 
-    product_identifier = selected_data[
-        "identifier"
-    ]
+    # --------------------------------------------------------
+    # TABS
+    # --------------------------------------------------------
 
     tab1, tab2, tab3 = st.tabs([
-        "🔎 Inspect",
-        "✏️ Edit",
-        "🗑️ Delete",
+
+        "🔎 Inspect Product",
+
+        "✏️ Edit Product",
+
+        "🗑️ Delete Product",
+
     ])
+
+    # --------------------------------------------------------
+    # INSPECT
+    # --------------------------------------------------------
 
     with tab1:
 
@@ -862,49 +1079,74 @@ def product_management_interface():
             selected_product
         )
 
+    # --------------------------------------------------------
+    # EDIT
+    # --------------------------------------------------------
+
     with tab2:
 
-        update_product_form(
-            selected_product,
-            product_identifier,
+        edit_product_form(
+            selected_product
         )
+
+    # --------------------------------------------------------
+    # DELETE
+    # --------------------------------------------------------
 
     with tab3:
 
         st.warning(
-            "This action permanently deletes "
-            "the selected product."
+            "⚠️ Deleting a product cannot be undone."
         )
 
-        confirm = st.checkbox(
-            "I confirm that I want to delete this product.",
-            key=f"confirm_{product_identifier}",
+        st.write(
+            f"Selected product: "
+            f"**{selected_product.get('name')}**"
+        )
+
+        confirm_delete = st.checkbox(
+            "I understand and want to delete this product.",
+            key=f"confirm_delete_{product_id}",
         )
 
         if st.button(
             "🗑️ Delete Product",
+            type="secondary",
             use_container_width=True,
-            disabled=not confirm,
-            key=f"delete_{product_identifier}",
+            disabled=not confirm_delete,
+            key=f"delete_product_{product_id}",
         ):
 
             result = delete_existing_product(
-                product_identifier
+                product_id
             )
 
-            if result["success"]:
+            if isinstance(result, dict):
 
-                st.success(
-                    result["message"]
-                )
+                if result.get("success"):
 
-                st.rerun()
+                    st.success(
+                        "Product deleted successfully."
+                    )
+
+                    st.rerun()
+
+                else:
+
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to delete product.",
+                        )
+                    )
 
             else:
 
-                st.error(
-                    result["message"]
+                st.success(
+                    "Product deleted successfully."
                 )
+
+                st.rerun()
 
 
 # ============================================================
@@ -928,7 +1170,9 @@ def display_management_ui():
 if __name__ == "__main__":
 
     st.set_page_config(
-        page_title="Product Management",
+        page_title=(
+            "Product Library Management"
+        ),
         page_icon="🛠️",
         layout="wide",
     )
