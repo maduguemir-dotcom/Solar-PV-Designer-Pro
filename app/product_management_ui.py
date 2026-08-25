@@ -4,8 +4,6 @@ from copy import deepcopy
 from library_store import (
     load_product_library,
     save_product_library,
-    remove_product_from_library,
-    get_library_summary,
 )
 
 # ============================================================
@@ -105,21 +103,25 @@ def get_product_identifier(product, index):
 
 def get_products():
     """
-    Load products from the persistent product library.
+    Load products directly from the persistent product library.
     """
 
     try:
         products = load_product_library()
 
-        if isinstance(products, list):
-            return products
+        if products is None:
+            return []
 
-        return []
+        if not isinstance(products, list):
+            return []
+
+        return products
 
     except Exception as exc:
-        st.error(f"Unable to load product library: {exc}")
+        st.error(
+            f"Unable to load product library: {exc}"
+        )
         return []
-
 
 # ============================================================
 # SAVE PRODUCTS
@@ -131,13 +133,24 @@ def save_products(products):
     """
 
     try:
+
+        if not isinstance(products, list):
+            st.error(
+                "Product library data must be a list."
+            )
+            return False
+
         save_product_library(products)
+
         return True
 
     except Exception as exc:
-        st.error(f"Unable to save product library: {exc}")
-        return False
 
+        st.error(
+            f"Unable to save product library: {exc}"
+        )
+
+        return False
 
 # ============================================================
 # UPDATE EXISTING PRODUCT
@@ -926,7 +939,10 @@ def product_management_interface():
         total_products = 0
 
     products = get_products()
-
+st.write(
+    "DEBUG — Products loaded:",
+    len(products)
+)
     if not products:
 
         st.info(
