@@ -1,30 +1,15 @@
 import streamlit as st
 
+from product_management_ui import (
+    display_product_management_ui,
+)
+
 st.set_page_config(
-    page_title="Product Management UI Diagnostic",
-    page_icon="🧰",
+    page_title="Product Management Test",
+    page_icon="🛠️",
     layout="wide",
 )
 
-st.title("🧰 Product Management UI Diagnostic")
+st.title("Product Management UI Diagnostic")
 
-try:
-    import product_management_ui
-
-    st.success("product_management_ui.py imported successfully.")
-
-    st.subheader("Available Functions")
-
-    functions = [
-        name
-        for name in dir(product_management_ui)
-        if not name.startswith("_")
-        and callable(getattr(product_management_ui, name))
-    ]
-
-    st.write(functions)
-
-except Exception as e:
-    st.error("product_management_ui.py failed to import.")
-
-    st.exception(e)
+display_product_management_ui()
