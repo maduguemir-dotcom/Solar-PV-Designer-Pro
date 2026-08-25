@@ -10,6 +10,4 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Product Management UI Diagnostic")
-
 display_product_management_ui()
