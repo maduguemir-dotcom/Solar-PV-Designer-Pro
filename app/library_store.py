@@ -1,16 +1,28 @@
 """
 Solar PV Designer Pro Africa™
-Persistent Product and Service Library Storage
+Persistent Product and Service Library Store
 
-Files:
-    app/data/product_library.json
-    app/data/service_library.json
+Storage engine:
+    SQLite
+
+This module provides persistent storage for:
+
+1. Product Library
+2. Service Library
+3. Labour Costs
+4. Installation Services
+5. Transport Services
+6. Other Custom Services
+
+Database location:
+
+app/data/solar_pv_library.db
 """
 
 import json
-import shutil
-from pathlib import Path
+import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 
 # ============================================================
@@ -21,327 +33,843 @@ BASE_DIR = Path(__file__).resolve().parent
 
 DATA_DIR = BASE_DIR / "data"
 
+DATABASE_FILE = DATA_DIR / "solar_pv_library.db"
+
+# Backward-compatible paths
 PRODUCT_LIBRARY_FILE = DATA_DIR / "product_library.json"
 
 SERVICE_LIBRARY_FILE = DATA_DIR / "service_library.json"
 
-BACKUP_DIR = DATA_DIR / "backups"
-
 
 # ============================================================
-# DIRECTORY INITIALIZATION
+# DATA DIRECTORY
 # ============================================================
 
 def ensure_data_directory():
-    """Create data and backup directories if they do not exist."""
+    """
+    Ensure that the application data directory exists.
+    """
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Create empty product library if missing
-    if not PRODUCT_LIBRARY_FILE.exists():
-        save_json_file(PRODUCT_LIBRARY_FILE, [])
-
-    # Create empty service library if missing
-    if not SERVICE_LIBRARY_FILE.exists():
-        save_json_file(SERVICE_LIBRARY_FILE, [])
+    DATA_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     return DATA_DIR
 
 
 # ============================================================
-# JSON HELPERS
+# DATABASE CONNECTION
 # ============================================================
 
-def load_json_file(file_path, default=None):
+def get_connection():
     """
-    Safely load a JSON file.
-
-    Returns the supplied default value if the file does not
-    exist or cannot be read.
+    Create and return a SQLite database connection.
     """
 
     ensure_data_directory()
 
-    file_path = Path(file_path)
-
-    if default is None:
-        default = []
-
-    if not file_path.exists():
-        save_json_file(file_path, default)
-        return default
-
-    try:
-        with open(file_path, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        return data
-
-    except json.JSONDecodeError:
-        return default
-
-    except Exception:
-        return default
-
-
-def save_json_file(file_path, data):
-    """
-    Safely save Python data to JSON.
-    """
-
-    file_path = Path(file_path)
-
-    file_path.parent.mkdir(
-        parents=True,
-        exist_ok=True
+    connection = sqlite3.connect(
+        DATABASE_FILE
     )
 
-    with open(file_path, "w", encoding="utf-8") as file:
+    connection.row_factory = sqlite3.Row
 
-        json.dump(
-            data,
-            file,
-            indent=4,
-            ensure_ascii=False,
-            default=str
+    return connection
+
+
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+
+def initialize_database():
+    """
+    Create the required database tables.
+    """
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    # --------------------------------------------------------
+    # PRODUCT LIBRARY
+    # --------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS products (
+
+            id TEXT PRIMARY KEY,
+
+            name TEXT NOT NULL,
+
+            category TEXT,
+
+            manufacturer TEXT,
+
+            model TEXT,
+
+            technology TEXT,
+
+            rated_power_w REAL DEFAULT 0,
+
+            voltage_v REAL DEFAULT 0,
+
+            current_a REAL DEFAULT 0,
+
+            capacity_ah REAL DEFAULT 0,
+
+            energy_kwh REAL DEFAULT 0,
+
+            efficiency_percent REAL DEFAULT 0,
+
+            warranty_years INTEGER DEFAULT 0,
+
+            supplier TEXT,
+
+            country TEXT,
+
+            price REAL DEFAULT 0,
+
+            currency TEXT DEFAULT 'USD',
+
+            quantity INTEGER DEFAULT 1,
+
+            notes TEXT,
+
+            product_data TEXT,
+
+            created_at TEXT,
+
+            updated_at TEXT
+        )
+        """
+    )
+
+    # --------------------------------------------------------
+    # SERVICE LIBRARY
+    # --------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS services (
+
+            id TEXT PRIMARY KEY,
+
+            name TEXT NOT NULL,
+
+            category TEXT,
+
+            description TEXT,
+
+            provider TEXT,
+
+            country TEXT,
+
+            price REAL DEFAULT 0,
+
+            currency TEXT DEFAULT 'USD',
+
+            unit TEXT,
+
+            notes TEXT,
+
+            service_data TEXT,
+
+            created_at TEXT,
+
+            updated_at TEXT
+        )
+        """
+    )
+
+    connection.commit()
+
+    connection.close()
+
+
+# ============================================================
+# SAFE VALUE CONVERSION
+# ============================================================
+
+def safe_float(value, default=0.0):
+
+    try:
+
+        if value is None or value == "":
+            return float(default)
+
+        return float(value)
+
+    except (
+        ValueError,
+        TypeError,
+    ):
+
+        return float(default)
+
+
+def safe_int(value, default=0):
+
+    try:
+
+        if value is None or value == "":
+            return int(default)
+
+        return int(value)
+
+    except (
+        ValueError,
+        TypeError,
+    ):
+
+        return int(default)
+
+
+# ============================================================
+# PRODUCT NORMALIZATION
+# ============================================================
+
+def normalize_product(product):
+    """
+    Normalize a product record so that all
+    standard fields exist.
+    """
+
+    product = dict(product or {})
+
+    return {
+
+        "id": str(
+            product.get(
+                "id",
+                ""
+            )
+        ),
+
+        "name": str(
+            product.get(
+                "name",
+                ""
+            )
+        ),
+
+        "category": str(
+            product.get(
+                "category",
+                "Other"
+            )
+        ),
+
+        "manufacturer": str(
+            product.get(
+                "manufacturer",
+                ""
+            )
+        ),
+
+        "model": str(
+            product.get(
+                "model",
+                ""
+            )
+        ),
+
+        "technology": str(
+            product.get(
+                "technology",
+                "Other"
+            )
+        ),
+
+        "rated_power_w": safe_float(
+            product.get(
+                "rated_power_w",
+                0
+            )
+        ),
+
+        "voltage_v": safe_float(
+            product.get(
+                "voltage_v",
+                0
+            )
+        ),
+
+        "current_a": safe_float(
+            product.get(
+                "current_a",
+                0
+            )
+        ),
+
+        "capacity_ah": safe_float(
+            product.get(
+                "capacity_ah",
+                0
+            )
+        ),
+
+        "energy_kwh": safe_float(
+            product.get(
+                "energy_kwh",
+                0
+            )
+        ),
+
+        "efficiency_percent": safe_float(
+            product.get(
+                "efficiency_percent",
+                0
+            )
+        ),
+
+        "warranty_years": safe_int(
+            product.get(
+                "warranty_years",
+                0
+            )
+        ),
+
+        "supplier": str(
+            product.get(
+                "supplier",
+                ""
+            )
+        ),
+
+        "country": str(
+            product.get(
+                "country",
+                ""
+            )
+        ),
+
+        "price": safe_float(
+            product.get(
+                "price",
+                0
+            )
+        ),
+
+        "currency": str(
+            product.get(
+                "currency",
+                "USD"
+            )
+        ),
+
+        "quantity": max(
+            1,
+            safe_int(
+                product.get(
+                    "quantity",
+                    1
+                ),
+                1
+            )
+        ),
+
+        "notes": str(
+            product.get(
+                "notes",
+                ""
+            )
+        ),
+    }
+
+
+# ============================================================
+# ADD PRODUCT
+# ============================================================
+
+def add_product_to_library(product):
+    """
+    Add a new product to the SQLite library.
+
+    If the product ID already exists,
+    the product will be updated.
+    """
+
+    initialize_database()
+
+    product = dict(product or {})
+
+    normalized = normalize_product(
+        product
+    )
+
+    product_id = normalized.get(
+        "id",
+        ""
+    )
+
+    if not product_id:
+
+        product_id = (
+            f"product_"
+            f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        )
+
+        normalized["id"] = product_id
+
+    now = datetime.now().isoformat()
+
+    product_data = deepcopy_product_data(
+        product,
+        normalized,
+    )
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO products (
+
+            id,
+            name,
+            category,
+            manufacturer,
+            model,
+            technology,
+            rated_power_w,
+            voltage_v,
+            current_a,
+            capacity_ah,
+            energy_kwh,
+            efficiency_percent,
+            warranty_years,
+            supplier,
+            country,
+            price,
+            currency,
+            quantity,
+            notes,
+            product_data,
+            created_at,
+            updated_at
+
+        )
+
+        VALUES (
+
+            :id,
+            :name,
+            :category,
+            :manufacturer,
+            :model,
+            :technology,
+            :rated_power_w,
+            :voltage_v,
+            :current_a,
+            :capacity_ah,
+            :energy_kwh,
+            :efficiency_percent,
+            :warranty_years,
+            :supplier,
+            :country,
+            :price,
+            :currency,
+            :quantity,
+            :notes,
+            :product_data,
+            :created_at,
+            :updated_at
+
+        )
+
+        ON CONFLICT(id)
+
+        DO UPDATE SET
+
+            name = excluded.name,
+            category = excluded.category,
+            manufacturer = excluded.manufacturer,
+            model = excluded.model,
+            technology = excluded.technology,
+            rated_power_w = excluded.rated_power_w,
+            voltage_v = excluded.voltage_v,
+            current_a = excluded.current_a,
+            capacity_ah = excluded.capacity_ah,
+            energy_kwh = excluded.energy_kwh,
+            efficiency_percent = excluded.efficiency_percent,
+            warranty_years = excluded.warranty_years,
+            supplier = excluded.supplier,
+            country = excluded.country,
+            price = excluded.price,
+            currency = excluded.currency,
+            quantity = excluded.quantity,
+            notes = excluded.notes,
+            product_data = excluded.product_data,
+            updated_at = excluded.updated_at
+        """,
+
+        {
+            **normalized,
+
+            "product_data": json.dumps(
+                product_data
+            ),
+
+            "created_at": now,
+
+            "updated_at": now,
+        }
+    )
+
+    connection.commit()
+
+    connection.close()
+
+    return normalized
+
+
+# ============================================================
+# PRESERVE CUSTOM PRODUCT FIELDS
+# ============================================================
+
+def deepcopy_product_data(
+    original_product,
+    normalized_product,
+):
+    """
+    Preserve all custom category-specific fields.
+    """
+
+    data = dict(
+        original_product
+    )
+
+    data.update(
+        normalized_product
+    )
+
+    return data
+
+
+# ============================================================
+# LOAD PRODUCT LIBRARY
+# ============================================================
+
+def load_product_library():
+    """
+    Load all products from SQLite.
+    """
+
+    initialize_database()
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+
+        FROM products
+
+        ORDER BY updated_at DESC
+        """
+    )
+
+    rows = cursor.fetchall()
+
+    connection.close()
+
+    products = []
+
+    for row in rows:
+
+        product = dict(row)
+
+        raw_data = product.get(
+            "product_data"
+        )
+
+        if raw_data:
+
+            try:
+
+                stored_data = json.loads(
+                    raw_data
+                )
+
+                if isinstance(
+                    stored_data,
+                    dict
+                ):
+
+                    stored_data.update(
+                        {
+                            key: value
+
+                            for key, value
+                            in product.items()
+
+                            if key
+                            not in [
+                                "product_data",
+                                "created_at",
+                                "updated_at",
+                            ]
+                        }
+                    )
+
+                    product = stored_data
+
+            except Exception:
+
+                pass
+
+        product.pop(
+            "product_data",
+            None
+        )
+
+        product.pop(
+            "created_at",
+            None
+        )
+
+        product.pop(
+            "updated_at",
+            None
+        )
+
+        products.append(
+            product
+        )
+
+    return products
+
+
+# ============================================================
+# SAVE PRODUCT LIBRARY
+# ============================================================
+
+def save_product_library(products):
+    """
+    Replace the current product library
+    with the supplied list.
+    """
+
+    if not isinstance(
+        products,
+        list
+    ):
+
+        raise ValueError(
+            "Products must be provided as a list."
+        )
+
+    initialize_database()
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM products"
+    )
+
+    connection.commit()
+
+    connection.close()
+
+    for product in products:
+
+        add_product_to_library(
+            product
         )
 
     return True
 
 
 # ============================================================
-# PRODUCT LIBRARY
+# UPDATE PRODUCT
 # ============================================================
 
-def load_product_library():
-    """Load all products from the product library."""
-
-    ensure_data_directory()
-
-    data = load_json_file(
-        PRODUCT_LIBRARY_FILE,
-        default=[]
-    )
-
-    if isinstance(data, list):
-        return data
-
-    return []
-
-
-def save_product_library(products):
-    """Save the complete product library."""
-
-    ensure_data_directory()
-
-    if products is None:
-        products = []
-
-    return save_json_file(
-        PRODUCT_LIBRARY_FILE,
-        products
-    )
-
-
-def add_product_to_library(product):
-    """
-    Add a product to the persistent product library.
-    """
-
-    products = load_product_library()
-
-    if not isinstance(product, dict):
-        raise ValueError(
-            "Product must be a dictionary."
-        )
-
-    product = product.copy()
-
-    # Generate ID if one does not already exist
-    if not product.get("id"):
-
-        timestamp = datetime.now().strftime(
-            "%Y%m%d%H%M%S%f"
-        )
-
-        product["id"] = f"PROD-{timestamp}"
-
-    # Add timestamps
-    now = datetime.now().isoformat()
-
-    if not product.get("created_at"):
-        product["created_at"] = now
-
-    product["updated_at"] = now
-
-    products.append(product)
-
-    save_product_library(products)
-
-    return product
-
-
-def get_product_from_library(product_id):
-    """Retrieve a single product by ID."""
-
-    products = load_product_library()
-
-    for product in products:
-
-        if str(product.get("id")) == str(product_id):
-            return product
-
-    return None
-
-
-def update_product_in_library(product_id, updated_data):
+def update_product_in_library(
+    product_id,
+    updated_product,
+):
     """
     Update an existing product.
     """
 
-    products = load_product_library()
+    if not product_id:
 
-    for index, product in enumerate(products):
+        return False
 
-        if str(product.get("id")) == str(product_id):
+    existing_products = (
+        load_product_library()
+    )
 
-            original_created_at = product.get(
-                "created_at"
+    existing = None
+
+    for product in existing_products:
+
+        if str(
+            product.get(
+                "id"
             )
+        ) == str(product_id):
 
-            product.update(updated_data)
+            existing = product
 
-            product["id"] = product_id
+            break
 
-            product["created_at"] = original_created_at
+    if existing is None:
 
-            product["updated_at"] = (
-                datetime.now().isoformat()
-            )
+        return False
 
-            products[index] = product
+    merged_product = dict(
+        existing
+    )
 
-            save_product_library(products)
+    merged_product.update(
+        dict(updated_product or {})
+    )
 
-            return {
-                "success": True,
-                "product": product,
-                "message": "Product updated successfully."
-            }
+    merged_product["id"] = str(
+        product_id
+    )
 
-    return {
-        "success": False,
-        "message": "Product not found."
-    }
+    add_product_to_library(
+        merged_product
+    )
+
+    return True
 
 
-def remove_product_from_library(product_id):
+# ============================================================
+# REMOVE PRODUCT
+# ============================================================
+
+def remove_product_from_library(
+    product_id,
+):
     """
-    Remove a product from the library.
+    Remove a product permanently.
     """
 
-    products = load_product_library()
+    if not product_id:
 
-    original_count = len(products)
+        return False
 
-    products = [
+    initialize_database()
 
-        product
-        for product in products
+    connection = get_connection()
 
-        if str(product.get("id"))
-        != str(product_id)
-    ]
+    cursor = connection.cursor()
 
-    if len(products) == original_count:
+    cursor.execute(
+        """
+        DELETE FROM products
 
-        return {
-            "success": False,
-            "message": "Product not found."
-        }
+        WHERE id = ?
+        """,
+        (
+            str(product_id),
+        )
+    )
 
-    save_product_library(products)
+    deleted = (
+        cursor.rowcount > 0
+    )
 
-    return {
-        "success": True,
-        "message": "Product removed successfully."
-    }
+    connection.commit()
 
+    connection.close()
+
+    return deleted
+
+
+# ============================================================
+# SEARCH PRODUCT LIBRARY
+# ============================================================
 
 def search_product_library(
     query="",
     category=None,
-    technology=None
 ):
     """
-    Search the product library.
+    Search products by name,
+    manufacturer, model or category.
     """
 
-    products = load_product_library()
+    products = (
+        load_product_library()
+    )
+
+    query = str(
+        query or ""
+    ).lower().strip()
 
     results = []
 
-    query = str(query or "").lower().strip()
-
     for product in products:
 
-        # Category filter
         if category:
 
-            if str(
-                product.get("category", "")
-            ) != str(category):
+            if product.get(
+                "category"
+            ) != category:
 
                 continue
 
-        # Technology filter
-        if technology:
-
-            if str(
-                product.get("technology", "")
-            ) != str(technology):
-
-                continue
-
-        # Search query
         if query:
 
             searchable_text = " ".join(
+                [
+                    str(
+                        product.get(
+                            "name",
+                            ""
+                        )
+                    ),
 
-                str(value)
+                    str(
+                        product.get(
+                            "manufacturer",
+                            ""
+                        )
+                    ),
 
-                for value in product.values()
+                    str(
+                        product.get(
+                            "model",
+                            ""
+                        )
+                    ),
 
-                if value is not None
+                    str(
+                        product.get(
+                            "technology",
+                            ""
+                        )
+                    ),
 
+                    str(
+                        product.get(
+                            "category",
+                            ""
+                        )
+                    ),
+                ]
             ).lower()
 
             if query not in searchable_text:
 
                 continue
 
-        results.append(product)
+        results.append(
+            product
+        )
 
     return results
-
-
-def clear_product_library():
-    """
-    Clear all products.
-
-    A backup is created first.
-    """
-
-    backup_library()
-
-    save_product_library([])
-
-    return {
-        "success": True,
-        "message": "Product library cleared."
-    }
 
 
 # ============================================================
@@ -349,283 +877,446 @@ def clear_product_library():
 # ============================================================
 
 def create_service_record(
-    name,
-    category="Other Service",
-    price=0,
-    currency="USD",
-    **kwargs
+    service
 ):
     """
-    Create a standard service record.
+    Normalize a service record.
     """
 
-    timestamp = datetime.now().strftime(
-        "%Y%m%d%H%M%S%f"
+    service = dict(
+        service or {}
     )
 
-    service = {
+    if not service.get("id"):
 
-        "id": f"SERV-{timestamp}",
+        service["id"] = (
+            f"service_"
+            f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        )
 
-        "name": name,
+    return {
 
-        "category": category,
+        **service,
 
-        "price": price,
+        "name": str(
+            service.get(
+                "name",
+                ""
+            )
+        ),
 
-        "currency": currency,
+        "category": str(
+            service.get(
+                "category",
+                "Other"
+            )
+        ),
 
-        "created_at":
-            datetime.now().isoformat(),
+        "description": str(
+            service.get(
+                "description",
+                ""
+            )
+        ),
 
-        "updated_at":
-            datetime.now().isoformat()
+        "provider": str(
+            service.get(
+                "provider",
+                ""
+            )
+        ),
+
+        "country": str(
+            service.get(
+                "country",
+                ""
+            )
+        ),
+
+        "price": safe_float(
+            service.get(
+                "price",
+                0
+            )
+        ),
+
+        "currency": str(
+            service.get(
+                "currency",
+                "USD"
+            )
+        ),
+
+        "unit": str(
+            service.get(
+                "unit",
+                "Unit"
+            )
+        ),
+
+        "notes": str(
+            service.get(
+                "notes",
+                ""
+            )
+        ),
     }
 
-    service.update(kwargs)
+
+def add_service_to_library(
+    service
+):
+
+    initialize_database()
+
+    service = create_service_record(
+        service
+    )
+
+    now = datetime.now().isoformat()
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO services (
+
+            id,
+            name,
+            category,
+            description,
+            provider,
+            country,
+            price,
+            currency,
+            unit,
+            notes,
+            service_data,
+            created_at,
+            updated_at
+
+        )
+
+        VALUES (
+
+            :id,
+            :name,
+            :category,
+            :description,
+            :provider,
+            :country,
+            :price,
+            :currency,
+            :unit,
+            :notes,
+            :service_data,
+            :created_at,
+            :updated_at
+
+        )
+
+        ON CONFLICT(id)
+
+        DO UPDATE SET
+
+            name = excluded.name,
+            category = excluded.category,
+            description = excluded.description,
+            provider = excluded.provider,
+            country = excluded.country,
+            price = excluded.price,
+            currency = excluded.currency,
+            unit = excluded.unit,
+            notes = excluded.notes,
+            service_data = excluded.service_data,
+            updated_at = excluded.updated_at
+        """,
+
+        {
+            **service,
+
+            "service_data": json.dumps(
+                service
+            ),
+
+            "created_at": now,
+
+            "updated_at": now,
+        }
+    )
+
+    connection.commit()
+
+    connection.close()
 
     return service
 
 
 def load_service_library():
-    """Load all services."""
 
-    ensure_data_directory()
+    initialize_database()
 
-    data = load_json_file(
-        SERVICE_LIBRARY_FILE,
-        default=[]
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+
+        FROM services
+
+        ORDER BY updated_at DESC
+        """
     )
 
-    if isinstance(data, list):
-        return data
+    rows = cursor.fetchall()
 
-    return []
+    connection.close()
 
+    services = []
 
-def save_service_library(services):
-    """Save the complete service library."""
+    for row in rows:
 
-    ensure_data_directory()
+        service = dict(row)
 
-    if services is None:
-        services = []
-
-    return save_json_file(
-        SERVICE_LIBRARY_FILE,
-        services
-    )
-
-
-def add_service_to_library(service):
-    """Add a service."""
-
-    services = load_service_library()
-
-    if not isinstance(service, dict):
-
-        raise ValueError(
-            "Service must be a dictionary."
+        raw_data = service.get(
+            "service_data"
         )
 
-    service = service.copy()
+        if raw_data:
 
-    if not service.get("id"):
+            try:
 
-        timestamp = datetime.now().strftime(
-            "%Y%m%d%H%M%S%f"
+                stored = json.loads(
+                    raw_data
+                )
+
+                if isinstance(
+                    stored,
+                    dict
+                ):
+
+                    service = stored
+
+            except Exception:
+
+                pass
+
+        service.pop(
+            "service_data",
+            None
         )
 
-        service["id"] = f"SERV-{timestamp}"
+        service.pop(
+            "created_at",
+            None
+        )
 
-    now = datetime.now().isoformat()
+        service.pop(
+            "updated_at",
+            None
+        )
 
-    if not service.get("created_at"):
+        services.append(
+            service
+        )
 
-        service["created_at"] = now
-
-    service["updated_at"] = now
-
-    services.append(service)
-
-    save_service_library(services)
-
-    return service
-
-
-def remove_service_from_library(service_id):
-
-    services = load_service_library()
-
-    original_count = len(services)
-
-    services = [
-
-        service
-        for service in services
-
-        if str(service.get("id"))
-        != str(service_id)
-
-    ]
-
-    if len(services) == original_count:
-
-        return {
-            "success": False,
-            "message": "Service not found."
-        }
-
-    save_service_library(services)
-
-    return {
-        "success": True,
-        "message": "Service removed successfully."
-    }
+    return services
 
 
-def search_service_library(
-    query="",
-    category=None
+def save_service_library(
+    services
 ):
 
-    services = load_service_library()
+    if not isinstance(
+        services,
+        list
+    ):
 
-    results = []
+        raise ValueError(
+            "Services must be a list."
+        )
 
-    query = str(query or "").lower().strip()
+    initialize_database()
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM services"
+    )
+
+    connection.commit()
+
+    connection.close()
 
     for service in services:
 
-        if category:
+        add_service_to_library(
+            service
+        )
 
-            if str(
-                service.get("category", "")
-            ) != str(category):
+    return True
 
-                continue
 
-        if query:
+def remove_service_from_library(
+    service_id
+):
 
-            searchable_text = " ".join(
+    initialize_database()
 
-                str(value)
+    connection = get_connection()
 
-                for value in service.values()
+    cursor = connection.cursor()
 
-                if value is not None
+    cursor.execute(
+        """
+        DELETE FROM services
 
-            ).lower()
+        WHERE id = ?
+        """,
+        (
+            str(service_id),
+        )
+    )
 
-            if query not in searchable_text:
+    deleted = (
+        cursor.rowcount > 0
+    )
 
-                continue
+    connection.commit()
 
-        results.append(service)
+    connection.close()
 
-    return results
+    return deleted
+
+
+def clear_product_library():
+
+    initialize_database()
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM products"
+    )
+
+    connection.commit()
+
+    connection.close()
+
+    return True
 
 
 def clear_service_library():
 
-    backup_library()
+    initialize_database()
 
-    save_service_library([])
+    connection = get_connection()
 
-    return {
-        "success": True,
-        "message": "Service library cleared."
-    }
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM services"
+    )
+
+    connection.commit()
+
+    connection.close()
+
+    return True
+
+
+def clear_all_libraries():
+
+    clear_product_library()
+
+    clear_service_library()
+
+    return True
 
 
 # ============================================================
-# BACKUP SYSTEM
+# BACKUP DATABASE
 # ============================================================
 
 def backup_library():
     """
-    Create timestamped backups of product and service libraries.
+    Create a JSON backup of all libraries.
     """
 
     ensure_data_directory()
 
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
+    backup_dir = (
+        DATA_DIR / "backups"
     )
 
-    backup_files = []
+    backup_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    files_to_backup = [
+    timestamp = (
+        datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
+    )
 
-        PRODUCT_LIBRARY_FILE,
-        SERVICE_LIBRARY_FILE
-    ]
+    backup_file = (
+        backup_dir
+        / f"library_backup_{timestamp}.json"
+    )
 
-    for source_file in files_to_backup:
+    backup_data = {
 
-        if source_file.exists():
+        "created_at": (
+            datetime.now().isoformat()
+        ),
 
-            destination = (
+        "products": (
+            load_product_library()
+        ),
 
-                BACKUP_DIR
-
-                / f"{source_file.stem}_{timestamp}.json"
-
-            )
-
-            shutil.copy2(
-                source_file,
-                destination
-            )
-
-            backup_files.append(
-                str(destination)
-            )
-
-    return {
-
-        "success": True,
-
-        "timestamp": timestamp,
-
-        "files": backup_files
+        "services": (
+            load_service_library()
+        ),
     }
+
+    with open(
+        backup_file,
+        "w",
+        encoding="utf-8",
+    ) as file:
+
+        json.dump(
+            backup_data,
+            file,
+            indent=4,
+            ensure_ascii=False,
+        )
+
+    return backup_file
 
 
 # ============================================================
-# COMPLETE LIBRARY MANAGEMENT
+# LIBRARY SUMMARY
 # ============================================================
-
-def clear_all_libraries():
-    """
-    Back up and clear both product and service libraries.
-    """
-
-    backup_result = backup_library()
-
-    save_product_library([])
-
-    save_service_library([])
-
-    return {
-
-        "success": True,
-
-        "message":
-            "All libraries cleared successfully.",
-
-        "backup": backup_result
-    }
-
 
 def get_library_summary():
-    """
-    Return a summary of stored records.
-    """
 
-    products = load_product_library()
+    products = (
+        load_product_library()
+    )
 
-    services = load_service_library()
+    services = (
+        load_service_library()
+    )
 
     categories = {}
 
@@ -637,54 +1328,94 @@ def get_library_summary():
         )
 
         categories[category] = (
-            categories.get(category, 0) + 1
-        )
-
-    service_categories = {}
-
-    for service in services:
-
-        category = service.get(
-            "category",
-            "Other"
-        )
-
-        service_categories[category] = (
-
-            service_categories.get(
+            categories.get(
                 category,
                 0
             )
-
             + 1
         )
 
     return {
 
-        "total_products": len(products),
+        "total_products": len(
+            products
+        ),
 
-        "total_services": len(services),
+        "total_services": len(
+            services
+        ),
 
         "product_categories": categories,
 
-        "service_categories":
-            service_categories,
-
-        "data_directory": str(DATA_DIR),
-
-        "product_library_file":
-            str(PRODUCT_LIBRARY_FILE),
-
-        "service_library_file":
-            str(SERVICE_LIBRARY_FILE),
-
-        "backup_directory":
-            str(BACKUP_DIR)
+        "database_file": str(
+            DATABASE_FILE
+        ),
     }
 
 
 # ============================================================
-# INITIALIZE STORAGE ON IMPORT
+# BACKWARD COMPATIBILITY
 # ============================================================
 
-ensure_data_directory()
+def load_json_file(file_path):
+    """
+    Compatibility function.
+    """
+
+    path = Path(file_path)
+
+    if not path.exists():
+
+        return []
+
+    try:
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            return json.load(file)
+
+    except Exception:
+
+        return []
+
+
+def save_json_file(
+    file_path,
+    data,
+):
+    """
+    Compatibility function.
+    """
+
+    path = Path(file_path)
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with open(
+        path,
+        "w",
+        encoding="utf-8",
+    ) as file:
+
+        json.dump(
+            data,
+            file,
+            indent=4,
+            ensure_ascii=False,
+        )
+
+    return True
+
+
+# ============================================================
+# INITIALIZE DATABASE
+# ============================================================
+
+initialize_database()
