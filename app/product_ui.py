@@ -2,34 +2,52 @@
 Solar PV Designer Pro Africa™
 Product Library User Interface
 
-Persistent product library interface.
+SQLite-connected Product Library UI.
 
-Storage flow:
-    product_ui.py
-        ↓
-    library_store.py
-        ↓
-    app/data/product_library.json
+This module provides:
+
+- Add Product
+- View Product Library
+- Search Products
+- Product Details
+- Product Comparison
+- Edit Product
+- Delete Product
+- Database Management
+- Backup
+
+All products are stored through library_store.py
+using the SQLite database:
+
+app/data/solar_pv_library.db
 """
 
-from copy import deepcopy
 import streamlit as st
+from copy import deepcopy
+
+
+# ============================================================
+# LIBRARY STORE IMPORTS
+# ============================================================
 
 from library_store import (
+    initialize_database,
     add_product_to_library,
     load_product_library,
     save_product_library,
-    remove_product_from_library,
-    update_product_in_library,
     search_product_library,
+    update_product_in_library,
+    remove_product_from_library,
     backup_library,
     get_library_summary,
-    ensure_data_directory,
+    clear_product_library,
+    safe_float,
+    safe_int,
 )
 
 
 # ============================================================
-# PRODUCT OPTIONS
+# PRODUCT CATEGORIES
 # ============================================================
 
 PRODUCT_CATEGORIES = [
@@ -42,6 +60,7 @@ PRODUCT_CATEGORIES = [
     "Protection",
     "Other",
 ]
+
 
 PRODUCT_TECHNOLOGIES = [
     "Monocrystalline",
@@ -61,801 +80,989 @@ PRODUCT_TECHNOLOGIES = [
 ]
 
 
+CURRENCIES = [
+    "USD",
+    "UGX",
+    "NGN",
+    "KES",
+    "EUR",
+    "GBP",
+    "Other",
+]
+
+
 # ============================================================
-# INITIALIZATION
+# INITIALIZE
 # ============================================================
 
-def initialize_database():
-    """Initialize persistent product storage."""
-    ensure_data_directory()
+def initialize_product_database():
+    """
+    Initialize the SQLite Product Library.
+    """
+
+    initialize_database()
+
     return True
 
 
-def initialize_product_database():
-    """Backward-compatible product database initializer."""
-    return initialize_database()
+# Backward compatibility
+
+initialize_product_database()
+
+
+def initialize_database_compatibility():
+    """
+    Backward-compatible database initializer.
+    """
+
+    initialize_database()
+
+    return True
 
 
 # ============================================================
-# UTILITY FUNCTIONS
+# SAFE HELPERS
 # ============================================================
 
-def safe_float(value, default=0.0):
-    """Safely convert a value to float."""
-    try:
-        if value is None or value == "":
-            return float(default)
-        return float(value)
-    except (ValueError, TypeError):
-        return float(default)
+def _safe_text(value, default=""):
+
+    if value is None:
+        return default
+
+    return str(value)
 
 
-def safe_int(value, default=0):
-    """Safely convert a value to int."""
-    try:
-        if value is None or value == "":
-            return int(default)
-        return int(float(value))
-    except (ValueError, TypeError):
-        return int(default)
+def _generate_product_id(category):
 
+    import datetime
+
+    clean_category = (
+        str(category)
+        .lower()
+        .replace(" ", "_")
+    )
+
+    timestamp = (
+        datetime.datetime.now()
+        .strftime("%Y%m%d%H%M%S%f")
+    )
+
+    return f"{clean_category}_{timestamp}"
+
+
+# ============================================================
+# PRODUCT NORMALIZATION
+# ============================================================
 
 def normalize_product(product):
     """
-    Normalize a product record so all expected fields exist.
-
-    This keeps compatibility with older records and with
-    product_engine.py.
+    Normalize a product record while preserving
+    category-specific information.
     """
 
-    if not isinstance(product, dict):
-        return {}
+    product = deepcopy(product or {})
 
-    item = deepcopy(product)
+    category = product.get(
+        "category",
+        "Other",
+    )
 
-    defaults = {
-        "id": "",
-        "name": "",
-        "category": "Other",
-        "manufacturer": "",
-        "model": "",
-        "technology": "Other",
-        "rated_power_w": 0.0,
-        "voltage_v": 0.0,
-        "current_a": 0.0,
-        "capacity_ah": 0.0,
-        "energy_kwh": 0.0,
-        "efficiency_percent": 0.0,
-        "warranty_years": 0,
-        "supplier": "",
-        "country": "",
-        "price": 0.0,
-        "currency": "USD",
-        "quantity": 1,
-        "notes": "",
+    if not product.get("id"):
+
+        product["id"] = (
+            _generate_product_id(category)
+        )
+
+    normalized = {
+
+        "id": _safe_text(
+            product.get("id")
+        ),
+
+        "name": _safe_text(
+            product.get("name")
+        ),
+
+        "category": _safe_text(
+            category,
+            "Other",
+        ),
+
+        "manufacturer": _safe_text(
+            product.get("manufacturer")
+        ),
+
+        "model": _safe_text(
+            product.get("model")
+        ),
+
+        "technology": _safe_text(
+            product.get(
+                "technology",
+                "Other",
+            )
+        ),
+
+        "rated_power_w": safe_float(
+            product.get(
+                "rated_power_w",
+                0,
+            )
+        ),
+
+        "voltage_v": safe_float(
+            product.get(
+                "voltage_v",
+                0,
+            )
+        ),
+
+        "current_a": safe_float(
+            product.get(
+                "current_a",
+                0,
+            )
+        ),
+
+        "capacity_ah": safe_float(
+            product.get(
+                "capacity_ah",
+                0,
+            )
+        ),
+
+        "energy_kwh": safe_float(
+            product.get(
+                "energy_kwh",
+                0,
+            )
+        ),
+
+        "efficiency_percent": safe_float(
+            product.get(
+                "efficiency_percent",
+                0,
+            )
+        ),
+
+        "warranty_years": safe_int(
+            product.get(
+                "warranty_years",
+                0,
+            )
+        ),
+
+        "supplier": _safe_text(
+            product.get("supplier")
+        ),
+
+        "country": _safe_text(
+            product.get("country")
+        ),
+
+        "price": safe_float(
+            product.get(
+                "price",
+                0,
+            )
+        ),
+
+        "currency": _safe_text(
+            product.get(
+                "currency",
+                "USD",
+            ),
+            "USD",
+        ),
+
+        "quantity": max(
+            1,
+            safe_int(
+                product.get(
+                    "quantity",
+                    1,
+                ),
+                1,
+            ),
+        ),
+
+        "notes": _safe_text(
+            product.get("notes")
+        ),
     }
 
-    for key, value in defaults.items():
-        item.setdefault(key, value)
+    # Preserve all additional fields.
 
-    return item
+    for key, value in product.items():
 
+        if key not in normalized:
 
-def refresh_product_library():
-    """
-    Reload products from persistent storage.
-    """
+            normalized[key] = value
 
-    initialize_product_database()
-
-    products = load_product_library()
-
-    products = [
-        normalize_product(product)
-        for product in products
-        if isinstance(product, dict)
-    ]
-
-    return products
+    return normalized
 
 
 # ============================================================
 # CORE PRODUCT FUNCTIONS
 # ============================================================
 
+def create_product(**kwargs):
+    """
+    Create a normalized product record.
+
+    Accepts category-specific fields.
+    """
+
+    return normalize_product(kwargs)
+
+
+def add_product(product=None, **kwargs):
+    """
+    Add a product to the SQLite library.
+    """
+
+    if product is None:
+
+        product = kwargs
+
+    else:
+
+        merged = dict(product)
+
+        merged.update(kwargs)
+
+        product = merged
+
+    product = normalize_product(product)
+
+    return add_product_to_library(product)
+
+
 def get_products():
-    """Return all products from the persistent library."""
-    return refresh_product_library()
+    """
+    Get all products from SQLite.
+    """
+
+    initialize_product_database()
+
+    return load_product_library()
 
 
 def get_product(product_id):
-    """Return one product using its ID."""
+    """
+    Get one product by ID.
+    """
 
-    for product in get_products():
+    products = get_products()
 
-        if str(product.get("id")) == str(product_id):
+    for product in products:
+
+        if str(
+            product.get("id")
+        ) == str(product_id):
+
             return product
 
     return None
 
 
-def create_product(
-    name="",
-    category="Other",
-    manufacturer="",
-    model="",
-    technology="Other",
-    rated_power_w=0,
-    voltage_v=0,
-    current_a=0,
-    capacity_ah=0,
-    energy_kwh=0,
-    efficiency_percent=0,
-    warranty_years=0,
-    supplier="",
-    country="",
-    price=0,
-    currency="USD",
-    quantity=1,
-    notes="",
-    **kwargs,
-):
+def update_product(product_id, updated_product):
     """
-    Create a normalized product dictionary.
-
-    Accepts **kwargs for future compatibility and category-
-    specific fields.
+    Update a product in SQLite.
     """
 
-    product = {
-        "name": str(name).strip(),
-        "category": str(category).strip() or "Other",
-        "manufacturer": str(manufacturer).strip(),
-        "model": str(model).strip(),
-        "technology": str(technology).strip() or "Other",
-        "rated_power_w": safe_float(rated_power_w),
-        "voltage_v": safe_float(voltage_v),
-        "current_a": safe_float(current_a),
-        "capacity_ah": safe_float(capacity_ah),
-        "energy_kwh": safe_float(energy_kwh),
-        "efficiency_percent": safe_float(efficiency_percent),
-        "warranty_years": safe_int(warranty_years),
-        "supplier": str(supplier).strip(),
-        "country": str(country).strip(),
-        "price": safe_float(price),
-        "currency": str(currency).strip() or "USD",
-        "quantity": max(1, safe_int(quantity, 1)),
-        "notes": str(notes).strip(),
-    }
+    if not product_id:
 
-    # Include category-specific fields.
-    for key, value in kwargs.items():
-        product[key] = value
+        return False
 
-    return normalize_product(product)
+    existing = get_product(product_id)
 
+    if existing is None:
 
-def add_product(product):
-    """
-    Add a product to persistent storage.
+        return False
 
-    The function accepts either:
-        - a product dictionary, or
-        - keyword-compatible product data.
-    """
+    merged = dict(existing)
 
-    if not isinstance(product, dict):
-        raise ValueError("Product must be a dictionary.")
-
-    product = normalize_product(product)
-
-    if not product.get("name"):
-        raise ValueError("Product name is required.")
-
-    saved_product = add_product_to_library(product)
-
-    return normalize_product(saved_product)
-
-
-def update_product(product_id, updated_data):
-    """
-    Update an existing product.
-    """
-
-    if not isinstance(updated_data, dict):
-        raise ValueError("updated_data must be a dictionary.")
-
-    result = update_product_in_library(
-        product_id,
-        updated_data
+    merged.update(
+        updated_product or {}
     )
 
-    return result
+    merged["id"] = str(product_id)
+
+    merged = normalize_product(merged)
+
+    return update_product_in_library(
+        product_id,
+        merged,
+    )
 
 
 def delete_product(product_id):
     """
-    Delete a product from persistent storage.
+    Delete a product from SQLite.
     """
 
-    return remove_product_from_library(product_id)
+    return remove_product_from_library(
+        product_id
+    )
 
 
 # ============================================================
-# FILTERING AND SEARCHING
+# SEARCH AND FILTER
 # ============================================================
 
 def search_products(query=""):
     """
-    Search products using the persistent product library.
+    Search products.
     """
 
-    return [
-        normalize_product(product)
-        for product in search_product_library(query=query)
-    ]
+    return search_product_library(
+        query=query
+    )
 
 
 def database_search_products(query=""):
-    """Backward-compatible search function."""
+
     return search_products(query)
 
 
 def filter_products_by_category(category):
-    """Return products belonging to one category."""
 
-    if not category or category == "All":
-        return get_products()
+    products = get_products()
+
+    if (
+        not category
+        or category == "All"
+    ):
+
+        return products
 
     return [
+
         product
-        for product in get_products()
-        if product.get("category") == category
+
+        for product in products
+
+        if product.get("category")
+        == category
+
     ]
 
 
 def filter_products_by_technology(technology):
-    """Return products belonging to one technology."""
-
-    if not technology or technology == "All":
-        return get_products()
-
-    return [
-        product
-        for product in get_products()
-        if product.get("technology") == technology
-    ]
-
-
-# ============================================================
-# PRODUCT DETAILS
-# ============================================================
-
-def product_details(product):
-    """Display one product's details."""
-
-    if not product:
-        st.warning("No product selected.")
-        return
-
-    product = normalize_product(product)
-
-    st.subheader(product.get("name", "Product Details"))
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.write("**Category**")
-        st.write(product.get("category"))
-
-        st.write("**Manufacturer**")
-        st.write(product.get("manufacturer") or "—")
-
-        st.write("**Model**")
-        st.write(product.get("model") or "—")
-
-    with col2:
-        st.write("**Technology**")
-        st.write(product.get("technology") or "—")
-
-        st.write("**Supplier**")
-        st.write(product.get("supplier") or "—")
-
-        st.write("**Country**")
-        st.write(product.get("country") or "—")
-
-    with col3:
-        st.write("**Price**")
-        st.write(
-            f"{product.get('currency', 'USD')} "
-            f"{safe_float(product.get('price')):,.2f}"
-        )
-
-        st.write("**Quantity**")
-        st.write(product.get("quantity", 1))
-
-        st.write("**Warranty**")
-        st.write(
-            f"{product.get('warranty_years', 0)} years"
-        )
-
-    st.divider()
-
-    st.json(product)
-
-
-# ============================================================
-# PRODUCT COMPARISON
-# ============================================================
-
-def compare_products(products):
-    """
-    Return comparison-ready product records.
-    """
-
-    comparison = []
-
-    for product in products:
-
-        item = normalize_product(product)
-
-        comparison.append({
-            "name": item.get("name"),
-            "manufacturer": item.get("manufacturer"),
-            "model": item.get("model"),
-            "category": item.get("category"),
-            "technology": item.get("technology"),
-            "power_w": item.get("rated_power_w"),
-            "voltage_v": item.get("voltage_v"),
-            "current_a": item.get("current_a"),
-            "capacity_ah": item.get("capacity_ah"),
-            "energy_kwh": item.get("energy_kwh"),
-            "efficiency_percent": item.get(
-                "efficiency_percent"
-            ),
-            "warranty_years": item.get(
-                "warranty_years"
-            ),
-            "price": item.get("price"),
-            "currency": item.get("currency"),
-        })
-
-    return comparison
-
-
-def product_comparison():
-    """Interactive product comparison interface."""
-
-    st.subheader("⚖️ Product Comparison")
 
     products = get_products()
 
-    if not products:
-        st.info("No products available for comparison.")
-        return
+    if (
+        not technology
+        or technology == "All"
+    ):
 
-    product_names = {
-        f"{p.get('name', 'Unnamed')} | "
-        f"{p.get('manufacturer', '')} | "
-        f"{p.get('model', '')}": p
-        for p in products
-    }
+        return products
 
-    selected_names = st.multiselect(
-        "Select products to compare",
-        options=list(product_names.keys()),
-        max_selections=5,
-        key="product_comparison_selector",
-    )
+    return [
 
-    if selected_names:
+        product
 
-        selected_products = [
-            product_names[name]
-            for name in selected_names
-        ]
+        for product in products
 
-        comparison = compare_products(
-            selected_products
-        )
+        if product.get("technology")
+        == technology
 
-        st.dataframe(
-            comparison,
-            use_container_width=True,
-            hide_index=True,
-        )
+    ]
+
+
+def refresh_product_library():
+
+    initialize_product_database()
+
+    return get_products()
 
 
 # ============================================================
-# CATEGORY-SPECIFIC INPUT FORMS
+# PRODUCT CATEGORY FIELDS
 # ============================================================
 
-def _basic_product_fields(category, prefix):
+def product_category_fields(
+    category,
+    product=None,
+    prefix="add",
+):
     """
-    Common fields shared by all product categories.
+    Display category-specific input fields.
     """
 
-    col1, col2 = st.columns(2)
+    product = product or {}
 
-    with col1:
-        name = st.text_input(
-            "Product Name *",
-            key=f"{prefix}_name",
+    extra_data = {}
+
+    # --------------------------------------------------------
+    # SOLAR PANEL
+    # --------------------------------------------------------
+
+    if category == "Solar Panel":
+
+        st.subheader(
+            "☀️ Solar Panel Specifications"
         )
 
-        manufacturer = st.text_input(
-            "Manufacturer",
-            key=f"{prefix}_manufacturer",
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            extra_data[
+                "rated_power_w"
+            ] = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "rated_power_w",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_panel_power",
+            )
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "Maximum Power Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_panel_voltage",
+            )
+
+            extra_data[
+                "current_a"
+            ] = st.number_input(
+                "Maximum Power Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "current_a",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_panel_current",
+            )
+
+        with col2:
+
+            extra_data[
+                "efficiency_percent"
+            ] = st.number_input(
+                "Module Efficiency (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    product.get(
+                        "efficiency_percent",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_panel_efficiency",
+            )
+
+            extra_data[
+                "cell_type"
+            ] = st.text_input(
+                "Cell Type",
+                value=_safe_text(
+                    product.get(
+                        "cell_type",
+                        ""
+                    )
+                ),
+                key=f"{prefix}_panel_cell_type",
+            )
+
+            extra_data[
+                "dimensions"
+            ] = st.text_input(
+                "Dimensions",
+                value=_safe_text(
+                    product.get(
+                        "dimensions",
+                        ""
+                    )
+                ),
+                key=f"{prefix}_panel_dimensions",
+            )
+
+    # --------------------------------------------------------
+    # BATTERY
+    # --------------------------------------------------------
+
+    elif category == "Battery":
+
+        st.subheader(
+            "🔋 Battery Specifications"
         )
 
-        model = st.text_input(
-            "Model",
-            key=f"{prefix}_model",
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "Nominal Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_voltage",
+            )
+
+            extra_data[
+                "capacity_ah"
+            ] = st.number_input(
+                "Capacity (Ah)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "capacity_ah",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_capacity",
+            )
+
+            extra_data[
+                "energy_kwh"
+            ] = st.number_input(
+                "Energy Capacity (kWh)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "energy_kwh",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_energy",
+            )
+
+        with col2:
+
+            extra_data[
+                "cycle_life"
+            ] = st.number_input(
+                "Cycle Life",
+                min_value=0,
+                value=safe_int(
+                    product.get(
+                        "cycle_life",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_cycle_life",
+            )
+
+            extra_data[
+                "depth_of_discharge_percent"
+            ] = st.number_input(
+                "Depth of Discharge (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    product.get(
+                        "depth_of_discharge_percent",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_dod",
+            )
+
+            extra_data[
+                "efficiency_percent"
+            ] = st.number_input(
+                "Round Trip Efficiency (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    product.get(
+                        "efficiency_percent",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_battery_efficiency",
+            )
+
+    # --------------------------------------------------------
+    # INVERTER
+    # --------------------------------------------------------
+
+    elif category == "Inverter":
+
+        st.subheader(
+            "⚡ Inverter Specifications"
         )
 
-    with col2:
-        supplier = st.text_input(
-            "Supplier",
-            key=f"{prefix}_supplier",
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            extra_data[
+                "rated_power_w"
+            ] = st.number_input(
+                "Rated Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "rated_power_w",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_inverter_power",
+            )
+
+            extra_data[
+                "surge_power_w"
+            ] = st.number_input(
+                "Surge Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "surge_power_w",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_inverter_surge",
+            )
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "DC Input Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_inverter_voltage",
+            )
+
+        with col2:
+
+            extra_data[
+                "ac_output_voltage"
+            ] = st.number_input(
+                "AC Output Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "ac_output_voltage",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_inverter_ac_voltage",
+            )
+
+            extra_data[
+                "efficiency_percent"
+            ] = st.number_input(
+                "Efficiency (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=safe_float(
+                    product.get(
+                        "efficiency_percent",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_inverter_efficiency",
+            )
+
+    # --------------------------------------------------------
+    # CHARGE CONTROLLER
+    # --------------------------------------------------------
+
+    elif category == "Charge Controller":
+
+        st.subheader(
+            "🎛️ Charge Controller Specifications"
         )
 
-        country = st.text_input(
-            "Country",
-            key=f"{prefix}_country",
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "System Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_controller_voltage",
+            )
+
+            extra_data[
+                "max_current_a"
+            ] = st.number_input(
+                "Maximum Charging Current (A)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "max_current_a",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_controller_current",
+            )
+
+        with col2:
+
+            extra_data[
+                "max_pv_power_w"
+            ] = st.number_input(
+                "Maximum PV Power (W)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "max_pv_power_w",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_controller_pv_power",
+            )
+
+            extra_data[
+                "max_pv_voltage"
+            ] = st.number_input(
+                "Maximum PV Voltage (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "max_pv_voltage",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_controller_pv_voltage",
+            )
+
+    # --------------------------------------------------------
+    # SOLAR CABLE
+    # --------------------------------------------------------
+
+    elif category == "Solar Cable":
+
+        st.subheader(
+            "🔌 Solar Cable Specifications"
         )
 
-        warranty_years = st.number_input(
-            "Warranty (Years)",
-            min_value=0,
-            step=1,
-            key=f"{prefix}_warranty",
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            extra_data[
+                "cross_section_mm2"
+            ] = st.number_input(
+                "Cross-sectional Area (mm²)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "cross_section_mm2",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_cable_cross_section",
+            )
+
+            extra_data[
+                "current_a"
+            ] = st.number_input(
+                "Current Rating (A)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "current_a",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_cable_current",
+            )
+
+        with col2:
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "Voltage Rating (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_cable_voltage",
+            )
+
+            extra_data[
+                "length_m"
+            ] = st.number_input(
+                "Cable Length (m)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "length_m",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_cable_length",
+            )
+
+    # --------------------------------------------------------
+    # PROTECTION
+    # --------------------------------------------------------
+
+    elif category == "Protection":
+
+        st.subheader(
+            "🛡️ Protection Device Specifications"
         )
 
-    col3, col4, col5 = st.columns(3)
+        col1, col2 = st.columns(2)
 
-    with col3:
-        price = st.number_input(
-            "Unit Price",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_price",
+        with col1:
+
+            extra_data[
+                "device_type"
+            ] = st.text_input(
+                "Device Type",
+                value=_safe_text(
+                    product.get(
+                        "device_type",
+                        ""
+                    )
+                ),
+                key=f"{prefix}_protection_type",
+            )
+
+            extra_data[
+                "current_a"
+            ] = st.number_input(
+                "Current Rating (A)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "current_a",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_protection_current",
+            )
+
+        with col2:
+
+            extra_data[
+                "voltage_v"
+            ] = st.number_input(
+                "Voltage Rating (V)",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "voltage_v",
+                        0,
+                    )
+                ),
+                key=f"{prefix}_protection_voltage",
+            )
+
+            extra_data[
+                "poles"
+            ] = st.number_input(
+                "Number of Poles",
+                min_value=1,
+                value=max(
+                    1,
+                    safe_int(
+                        product.get(
+                            "poles",
+                            1,
+                        ),
+                        1,
+                    ),
+                ),
+                key=f"{prefix}_protection_poles",
+            )
+
+    # --------------------------------------------------------
+    # MOUNTING STRUCTURE
+    # --------------------------------------------------------
+
+    elif category == "Mounting Structure":
+
+        st.subheader(
+            "🏗️ Mounting Structure Specifications"
         )
 
-    with col4:
-        currency = st.selectbox(
-            "Currency",
-            ["USD", "UGX", "NGN", "EUR", "GBP", "Other"],
-            key=f"{prefix}_currency",
+        extra_data[
+            "mounting_type"
+        ] = st.text_input(
+            "Mounting Type",
+            value=_safe_text(
+                product.get(
+                    "mounting_type",
+                    ""
+                )
+            ),
+            key=f"{prefix}_mounting_type",
         )
 
-    with col5:
-        quantity = st.number_input(
-            "Quantity",
-            min_value=1,
-            step=1,
-            value=1,
-            key=f"{prefix}_quantity",
+        extra_data[
+            "material"
+        ] = st.text_input(
+            "Material",
+            value=_safe_text(
+                product.get(
+                    "material",
+                    ""
+                )
+            ),
+            key=f"{prefix}_mounting_material",
         )
 
-    return {
-        "name": name,
-        "category": category,
-        "manufacturer": manufacturer,
-        "model": model,
-        "supplier": supplier,
-        "country": country,
-        "warranty_years": warranty_years,
-        "price": price,
-        "currency": currency,
-        "quantity": quantity,
-    }
+    # --------------------------------------------------------
+    # OTHER
+    # --------------------------------------------------------
 
+    else:
 
-def _solar_panel_fields(prefix):
-    """Solar-panel-specific fields."""
-
-    technology = st.selectbox(
-        "Panel Technology",
-        [
-            "Monocrystalline",
-            "Polycrystalline",
-            "Thin Film",
-            "Other",
-        ],
-        key=f"{prefix}_panel_technology",
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        rated_power_w = st.number_input(
-            "Rated Power (W)",
-            min_value=0.0,
-            step=10.0,
-            key=f"{prefix}_panel_power",
+        st.subheader(
+            "📦 Additional Specifications"
         )
 
-    with col2:
-        voltage_v = st.number_input(
-            "Voltage (V)",
-            min_value=0.0,
-            step=0.1,
-            key=f"{prefix}_panel_voltage",
+        extra_data[
+            "specification"
+        ] = st.text_area(
+            "Product Specification",
+            value=_safe_text(
+                product.get(
+                    "specification",
+                    ""
+                )
+            ),
+            key=f"{prefix}_other_specification",
         )
 
-    with col3:
-        current_a = st.number_input(
-            "Current (A)",
-            min_value=0.0,
-            step=0.1,
-            key=f"{prefix}_panel_current",
-        )
-
-    efficiency_percent = st.number_input(
-        "Efficiency (%)",
-        min_value=0.0,
-        max_value=100.0,
-        step=0.1,
-        key=f"{prefix}_panel_efficiency",
-    )
-
-    return {
-        "technology": technology,
-        "rated_power_w": rated_power_w,
-        "voltage_v": voltage_v,
-        "current_a": current_a,
-        "efficiency_percent": efficiency_percent,
-    }
-
-
-def _battery_fields(prefix):
-    """Battery-specific fields."""
-
-    technology = st.selectbox(
-        "Battery Technology",
-        [
-            "Lithium",
-            "LiFePO4",
-            "Lead Acid",
-            "AGM",
-            "Gel",
-            "Other",
-        ],
-        key=f"{prefix}_battery_technology",
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        voltage_v = st.number_input(
-            "Nominal Voltage (V)",
-            min_value=0.0,
-            step=0.1,
-            key=f"{prefix}_battery_voltage",
-        )
-
-    with col2:
-        capacity_ah = st.number_input(
-            "Capacity (Ah)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_battery_capacity",
-        )
-
-    with col3:
-        energy_kwh = st.number_input(
-            "Energy Capacity (kWh)",
-            min_value=0.0,
-            step=0.1,
-            key=f"{prefix}_battery_energy",
-        )
-
-    return {
-        "technology": technology,
-        "voltage_v": voltage_v,
-        "capacity_ah": capacity_ah,
-        "energy_kwh": energy_kwh,
-    }
-
-
-def _inverter_fields(prefix):
-    """Inverter-specific fields."""
-
-    technology = st.selectbox(
-        "Inverter Type",
-        [
-            "Hybrid",
-            "Off Grid",
-            "On Grid",
-            "Other",
-        ],
-        key=f"{prefix}_inverter_technology",
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        rated_power_w = st.number_input(
-            "Rated Power (W)",
-            min_value=0.0,
-            step=100.0,
-            key=f"{prefix}_inverter_power",
-        )
-
-    with col2:
-        voltage_v = st.number_input(
-            "System/DC Voltage (V)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_inverter_voltage",
-        )
-
-    with col3:
-        efficiency_percent = st.number_input(
-            "Efficiency (%)",
-            min_value=0.0,
-            max_value=100.0,
-            step=0.1,
-            key=f"{prefix}_inverter_efficiency",
-        )
-
-    return {
-        "technology": technology,
-        "rated_power_w": rated_power_w,
-        "voltage_v": voltage_v,
-        "efficiency_percent": efficiency_percent,
-    }
-
-
-def _charge_controller_fields(prefix):
-    """Charge-controller-specific fields."""
-
-    technology = st.selectbox(
-        "Controller Type",
-        ["MPPT", "PWM", "Other"],
-        key=f"{prefix}_controller_technology",
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        voltage_v = st.number_input(
-            "System Voltage (V)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_controller_voltage",
-        )
-
-    with col2:
-        current_a = st.number_input(
-            "Rated Current (A)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_controller_current",
-        )
-
-    return {
-        "technology": technology,
-        "voltage_v": voltage_v,
-        "current_a": current_a,
-    }
-
-
-def _cable_fields(prefix):
-    """Solar-cable-specific fields."""
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        conductor_area_mm2 = st.number_input(
-            "Conductor Area (mm²)",
-            min_value=0.0,
-            step=0.5,
-            key=f"{prefix}_cable_area",
-        )
-
-    with col2:
-        voltage_v = st.number_input(
-            "Voltage Rating (V)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_cable_voltage",
-        )
-
-    with col3:
-        current_a = st.number_input(
-            "Current Rating (A)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_cable_current",
-        )
-
-    return {
-        "technology": "Other",
-        "conductor_area_mm2": conductor_area_mm2,
-        "voltage_v": voltage_v,
-        "current_a": current_a,
-    }
-
-
-def _protection_fields(prefix):
-    """Protection-device-specific fields."""
-
-    protection_type = st.selectbox(
-        "Protection Type",
-        [
-            "Circuit Breaker",
-            "Fuse",
-            "Surge Protection Device",
-            "Isolator",
-            "Other",
-        ],
-        key=f"{prefix}_protection_type",
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        voltage_v = st.number_input(
-            "Voltage Rating (V)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_protection_voltage",
-        )
-
-    with col2:
-        current_a = st.number_input(
-            "Current Rating (A)",
-            min_value=0.0,
-            step=1.0,
-            key=f"{prefix}_protection_current",
-        )
-
-    return {
-        "technology": protection_type,
-        "voltage_v": voltage_v,
-        "current_a": current_a,
-    }
-
-
-def _mounting_fields(prefix):
-    """Mounting-structure-specific fields."""
-
-    mounting_type = st.selectbox(
-        "Mounting Type",
-        [
-            "Roof Mount",
-            "Ground Mount",
-            "Pole Mount",
-            "Carport",
-            "Other",
-        ],
-        key=f"{prefix}_mounting_type",
-    )
-
-    material = st.text_input(
-        "Material",
-        key=f"{prefix}_mounting_material",
-    )
-
-    return {
-        "technology": mounting_type,
-        "material": material,
-    }
-
-
-def _other_product_fields(prefix):
-    """Generic fields for other components."""
-
-    technology = st.selectbox(
-        "Technology",
-        PRODUCT_TECHNOLOGIES,
-        key=f"{prefix}_other_technology",
-    )
-
-    return {
-        "technology": technology,
-    }
+    return extra_data
 
 
 # ============================================================
@@ -863,213 +1070,832 @@ def _other_product_fields(prefix):
 # ============================================================
 
 def add_product_form():
-    """Display the category-specific add-product form."""
+    """
+    Display the Add Product form.
+    """
 
-    st.subheader("➕ Add Product to Library")
-
-    category = st.selectbox(
-        "Product Category",
-        PRODUCT_CATEGORIES,
-        key="add_product_category",
+    st.subheader(
+        "➕ Add New Product"
     )
 
-    prefix = "add_product"
-
-    common_data = _basic_product_fields(
-        category,
-        prefix,
-    )
-
-    st.divider()
-    st.markdown(
-        f"### {category} Specifications"
-    )
-
-    specific_data = {}
-
-    if category == "Solar Panel":
-        specific_data = _solar_panel_fields(prefix)
-
-    elif category == "Battery":
-        specific_data = _battery_fields(prefix)
-
-    elif category == "Inverter":
-        specific_data = _inverter_fields(prefix)
-
-    elif category == "Charge Controller":
-        specific_data = _charge_controller_fields(prefix)
-
-    elif category == "Solar Cable":
-        specific_data = _cable_fields(prefix)
-
-    elif category == "Protection":
-        specific_data = _protection_fields(prefix)
-
-    elif category == "Mounting Structure":
-        specific_data = _mounting_fields(prefix)
-
-    else:
-        specific_data = _other_product_fields(prefix)
-
-    notes = st.text_area(
-        "Notes",
-        key="add_product_notes",
-    )
-
-    st.divider()
-
-    if st.button(
-        "💾 Save Product",
-        type="primary",
-        use_container_width=True,
-        key="save_product_button",
+    with st.form(
+        "add_product_form_sqlite",
+        clear_on_submit=True,
     ):
 
-        product_data = {}
+        col1, col2 = st.columns(2)
 
-        product_data.update(common_data)
-        product_data.update(specific_data)
+        with col1:
 
-        product_data["notes"] = notes
-
-        if not product_data.get("name", "").strip():
-            st.error(
-                "Please enter a product name."
-            )
-            return
-
-        try:
-
-            product = create_product(
-                **product_data
+            category = st.selectbox(
+                "Product Category",
+                PRODUCT_CATEGORIES,
+                key="add_product_category",
             )
 
-            saved_product = add_product(product)
+            name = st.text_input(
+                "Product Name *",
+                key="add_product_name",
+            )
+
+            manufacturer = st.text_input(
+                "Manufacturer",
+                key="add_product_manufacturer",
+            )
+
+            model = st.text_input(
+                "Model",
+                key="add_product_model",
+            )
+
+        with col2:
+
+            technology = st.selectbox(
+                "Technology",
+                PRODUCT_TECHNOLOGIES,
+                key="add_product_technology",
+            )
+
+            supplier = st.text_input(
+                "Supplier",
+                key="add_product_supplier",
+            )
+
+            country = st.text_input(
+                "Country",
+                key="add_product_country",
+            )
+
+            warranty_years = st.number_input(
+                "Warranty (Years)",
+                min_value=0,
+                value=0,
+                key="add_product_warranty",
+            )
+
+        st.divider()
+
+        extra_data = product_category_fields(
+            category=category,
+            product={},
+            prefix="add",
+        )
+
+        st.divider()
+
+        st.subheader(
+            "💰 Commercial Information"
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            price = st.number_input(
+                "Unit Price",
+                min_value=0.0,
+                value=0.0,
+                key="add_product_price",
+            )
+
+        with col2:
+
+            currency = st.selectbox(
+                "Currency",
+                CURRENCIES,
+                key="add_product_currency",
+            )
+
+        with col3:
+
+            quantity = st.number_input(
+                "Quantity",
+                min_value=1,
+                value=1,
+                key="add_product_quantity",
+            )
+
+        notes = st.text_area(
+            "Notes",
+            key="add_product_notes",
+        )
+
+        submitted = st.form_submit_button(
+            "💾 Save Product"
+        )
+
+        if submitted:
+
+            if not name.strip():
+
+                st.error(
+                    "Please enter a Product Name."
+                )
+
+                return
+
+            product = {
+
+                "id": _generate_product_id(
+                    category
+                ),
+
+                "name": name,
+
+                "category": category,
+
+                "manufacturer": manufacturer,
+
+                "model": model,
+
+                "technology": technology,
+
+                "supplier": supplier,
+
+                "country": country,
+
+                "warranty_years": warranty_years,
+
+                "price": price,
+
+                "currency": currency,
+
+                "quantity": quantity,
+
+                "notes": notes,
+
+                **extra_data,
+            }
+
+            result = add_product(product)
 
             st.success(
-                f"Product saved successfully: "
-                f"{saved_product.get('name')}"
-            )
-
-            st.json(saved_product)
-
-        except Exception as exc:
-
-            st.error(
-                f"Unable to save product: {exc}"
+                f"Product '{result['name']}' "
+                "saved successfully."
             )
 
 
 # ============================================================
-# SEARCH INTERFACE
+# EDIT PRODUCT FORM
+# ============================================================
+
+def edit_product_form(product):
+    """
+    Display an edit form for an existing product.
+    """
+
+    product_id = product.get("id")
+
+    if not product_id:
+
+        st.error(
+            "Invalid product ID."
+        )
+
+        return
+
+    with st.form(
+        f"edit_product_form_{product_id}"
+    ):
+
+        st.subheader(
+            f"✏️ Edit: {product.get('name', '')}"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            category_index = 0
+
+            if (
+                product.get("category")
+                in PRODUCT_CATEGORIES
+            ):
+
+                category_index = (
+                    PRODUCT_CATEGORIES.index(
+                        product.get("category")
+                    )
+                )
+
+            category = st.selectbox(
+                "Product Category",
+                PRODUCT_CATEGORIES,
+                index=category_index,
+                key=f"edit_category_{product_id}",
+            )
+
+            name = st.text_input(
+                "Product Name *",
+                value=_safe_text(
+                    product.get("name")
+                ),
+                key=f"edit_name_{product_id}",
+            )
+
+            manufacturer = st.text_input(
+                "Manufacturer",
+                value=_safe_text(
+                    product.get("manufacturer")
+                ),
+                key=f"edit_manufacturer_{product_id}",
+            )
+
+            model = st.text_input(
+                "Model",
+                value=_safe_text(
+                    product.get("model")
+                ),
+                key=f"edit_model_{product_id}",
+            )
+
+        with col2:
+
+            technology_value = (
+                product.get(
+                    "technology",
+                    "Other",
+                )
+            )
+
+            if (
+                technology_value
+                not in PRODUCT_TECHNOLOGIES
+            ):
+
+                technology_value = "Other"
+
+            technology_index = (
+                PRODUCT_TECHNOLOGIES.index(
+                    technology_value
+                )
+            )
+
+            technology = st.selectbox(
+                "Technology",
+                PRODUCT_TECHNOLOGIES,
+                index=technology_index,
+                key=f"edit_technology_{product_id}",
+            )
+
+            supplier = st.text_input(
+                "Supplier",
+                value=_safe_text(
+                    product.get("supplier")
+                ),
+                key=f"edit_supplier_{product_id}",
+            )
+
+            country = st.text_input(
+                "Country",
+                value=_safe_text(
+                    product.get("country")
+                ),
+                key=f"edit_country_{product_id}",
+            )
+
+            warranty_years = st.number_input(
+                "Warranty (Years)",
+                min_value=0,
+                value=safe_int(
+                    product.get(
+                        "warranty_years",
+                        0,
+                    )
+                ),
+                key=f"edit_warranty_{product_id}",
+            )
+
+        st.divider()
+
+        extra_data = product_category_fields(
+            category=category,
+            product=product,
+            prefix=f"edit_{product_id}",
+        )
+
+        st.divider()
+
+        st.subheader(
+            "💰 Commercial Information"
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            price = st.number_input(
+                "Unit Price",
+                min_value=0.0,
+                value=safe_float(
+                    product.get(
+                        "price",
+                        0,
+                    )
+                ),
+                key=f"edit_price_{product_id}",
+            )
+
+        with col2:
+
+            current_currency = (
+                product.get(
+                    "currency",
+                    "USD",
+                )
+            )
+
+            if (
+                current_currency
+                not in CURRENCIES
+            ):
+
+                current_currency = "USD"
+
+            currency = st.selectbox(
+                "Currency",
+                CURRENCIES,
+                index=CURRENCIES.index(
+                    current_currency
+                ),
+                key=f"edit_currency_{product_id}",
+            )
+
+        with col3:
+
+            quantity = st.number_input(
+                "Quantity",
+                min_value=1,
+                value=max(
+                    1,
+                    safe_int(
+                        product.get(
+                            "quantity",
+                            1,
+                        ),
+                        1,
+                    ),
+                ),
+                key=f"edit_quantity_{product_id}",
+            )
+
+        notes = st.text_area(
+            "Notes",
+            value=_safe_text(
+                product.get("notes")
+            ),
+            key=f"edit_notes_{product_id}",
+        )
+
+        submitted = st.form_submit_button(
+            "💾 Update Product"
+        )
+
+        if submitted:
+
+            if not name.strip():
+
+                st.error(
+                    "Product Name cannot be empty."
+                )
+
+                return
+
+            updated_product = {
+
+                **product,
+
+                "id": product_id,
+
+                "name": name,
+
+                "category": category,
+
+                "manufacturer": manufacturer,
+
+                "model": model,
+
+                "technology": technology,
+
+                "supplier": supplier,
+
+                "country": country,
+
+                "warranty_years": warranty_years,
+
+                "price": price,
+
+                "currency": currency,
+
+                "quantity": quantity,
+
+                "notes": notes,
+
+                **extra_data,
+            }
+
+            success = update_product(
+                product_id,
+                updated_product,
+            )
+
+            if success:
+
+                st.success(
+                    "Product updated successfully."
+                )
+
+                st.rerun()
+
+            else:
+
+                st.error(
+                    "Unable to update product."
+                )
+
+
+# ============================================================
+# PRODUCT DETAILS
+# ============================================================
+
+def product_details(product=None):
+    """
+    Display product details.
+    """
+
+    if product is None:
+
+        st.info(
+            "Select a product to view details."
+        )
+
+        return
+
+    st.subheader(
+        product.get(
+            "name",
+            "Product Details",
+        )
+    )
+
+    excluded = [
+        "id",
+        "name",
+        "category",
+    ]
+
+    for key, value in product.items():
+
+        if key in excluded:
+
+            continue
+
+        if (
+            value is None
+            or value == ""
+            or value == 0
+            or value == 0.0
+        ):
+
+            continue
+
+        label = (
+            key
+            .replace("_", " ")
+            .title()
+        )
+
+        st.write(
+            f"**{label}:** {value}"
+        )
+
+
+# ============================================================
+# PRODUCT LIBRARY DISPLAY
+# ============================================================
+
+def display_product_library():
+    """
+    Display products with View, Edit and Delete options.
+    """
+
+    products = get_products()
+
+    if not products:
+
+        st.info(
+            "No products found in the library."
+        )
+
+        return
+
+    for product in products:
+
+        product_id = product.get("id")
+
+        title = (
+            f"{product.get('name', 'Unnamed Product')} "
+            f"— {product.get('category', '')}"
+        )
+
+        with st.expander(
+            title
+        ):
+
+            col1, col2, col3 = st.columns(
+                3
+            )
+
+            with col1:
+
+                st.write(
+                    f"**Manufacturer:** "
+                    f"{product.get('manufacturer', '')}"
+                )
+
+                st.write(
+                    f"**Model:** "
+                    f"{product.get('model', '')}"
+                )
+
+            with col2:
+
+                st.write(
+                    f"**Technology:** "
+                    f"{product.get('technology', '')}"
+                )
+
+                st.write(
+                    f"**Price:** "
+                    f"{product.get('price', 0)} "
+                    f"{product.get('currency', '')}"
+                )
+
+            with col3:
+
+                st.write(
+                    f"**Warranty:** "
+                    f"{product.get('warranty_years', 0)} years"
+                )
+
+                st.write(
+                    f"**Quantity:** "
+                    f"{product.get('quantity', 1)}"
+                )
+
+            st.divider()
+
+            tab1, tab2, tab3 = st.tabs(
+                [
+                    "📋 Details",
+                    "✏️ Edit",
+                    "🗑️ Delete",
+                ]
+            )
+
+            with tab1:
+
+                product_details(product)
+
+            with tab2:
+
+                edit_product_form(product)
+
+            with tab3:
+
+                st.warning(
+                    "This action permanently deletes "
+                    "the selected product."
+                )
+
+                if st.button(
+                    "Delete This Product",
+                    key=f"delete_button_{product_id}",
+                ):
+
+                    success = delete_product(
+                        product_id
+                    )
+
+                    if success:
+
+                        st.success(
+                            "Product deleted successfully."
+                        )
+
+                        st.rerun()
+
+                    else:
+
+                        st.error(
+                            "Unable to delete product."
+                        )
+
+
+# ============================================================
+# PRODUCT SEARCH INTERFACE
 # ============================================================
 
 def product_search_interface():
-    """Interactive product search interface."""
+    """
+    Search and filter products.
+    """
 
-    st.subheader("🔎 Search Product Library")
-
-    search_query = st.text_input(
-        "Search",
-        placeholder=(
-            "Search by product, manufacturer, "
-            "model or technology..."
-        ),
-        key="product_library_search_query",
+    st.subheader(
+        "🔍 Search Product Library"
     )
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(
+        [2, 1]
+    )
 
     with col1:
-        category_filter = st.selectbox(
-            "Filter by Category",
-            ["All"] + PRODUCT_CATEGORIES,
-            key="product_library_category_filter",
+
+        search_query = st.text_input(
+            "Search",
+            placeholder=(
+                "Search by name, manufacturer, model..."
+            ),
+            key="product_library_search_query",
         )
 
     with col2:
 
-        technologies = sorted(
-            {
-                product.get("technology", "Other")
-                for product in get_products()
-                if product.get("technology")
-            }
-        )
-
-        technology_filter = st.selectbox(
-            "Filter by Technology",
-            ["All"] + technologies,
-            key="product_library_technology_filter",
+        category = st.selectbox(
+            "Category",
+            ["All"] + PRODUCT_CATEGORIES,
+            key="product_library_search_category",
         )
 
     products = get_products()
 
-    if search_query.strip():
-        products = search_products(search_query)
+    if search_query:
 
-    if category_filter != "All":
         products = [
+
             product
+
             for product in products
-            if product.get("category") == category_filter
+
+            if search_query.lower()
+            in " ".join(
+                [
+
+                    str(
+                        product.get(
+                            "name",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        product.get(
+                            "manufacturer",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        product.get(
+                            "model",
+                            ""
+                        )
+                    ),
+
+                    str(
+                        product.get(
+                            "technology",
+                            ""
+                        )
+                    ),
+                ]
+            ).lower()
+
         ]
 
-    if technology_filter != "All":
+    if category != "All":
+
         products = [
+
             product
+
             for product in products
-            if product.get("technology")
-            == technology_filter
+
+            if product.get("category")
+            == category
+
         ]
 
     st.write(
-        f"### Products Found: {len(products)}"
+        f"Products found: **{len(products)}**"
     )
 
     if products:
 
-        display_data = []
-
         for product in products:
 
-            display_data.append({
-                "Name": product.get("name"),
-                "Category": product.get("category"),
-                "Manufacturer": product.get(
-                    "manufacturer"
-                ),
-                "Model": product.get("model"),
-                "Technology": product.get(
-                    "technology"
-                ),
-                "Power (W)": product.get(
-                    "rated_power_w"
-                ),
-                "Voltage (V)": product.get(
-                    "voltage_v"
-                ),
-                "Capacity (Ah)": product.get(
-                    "capacity_ah"
-                ),
-                "Energy (kWh)": product.get(
-                    "energy_kwh"
-                ),
-                "Price": product.get("price"),
-                "Currency": product.get(
-                    "currency"
-                ),
-            })
-
-        st.dataframe(
-            display_data,
-            use_container_width=True,
-            hide_index=True,
-        )
+            st.write(
+                f"**{product.get('name')}** — "
+                f"{product.get('manufacturer', '')} "
+                f"{product.get('model', '')}"
+            )
 
     else:
 
-        st.info("No matching products found.")
+        st.info(
+            "No matching products found."
+        )
+
+
+# ============================================================
+# PRODUCT COMPARISON
+# ============================================================
+
+def compare_products(product_ids):
+    """
+    Return selected products for comparison.
+    """
+
+    if not product_ids:
+
+        return []
+
+    products = get_products()
+
+    selected = [
+
+        product
+
+        for product in products
+
+        if str(
+            product.get("id")
+        )
+        in [
+            str(item)
+            for item in product_ids
+        ]
+
+    ]
+
+    return selected
+
+
+def product_comparison():
+    """
+    Product comparison interface.
+    """
+
+    st.subheader(
+        "⚖️ Product Comparison"
+    )
+
+    products = get_products()
+
+    if len(products) < 2:
+
+        st.info(
+            "At least two products are required "
+            "for comparison."
+        )
+
+        return
+
+    product_map = {
+
+        f"{product.get('name')} "
+        f"({product.get('manufacturer', '')})":
+        product.get("id")
+
+        for product in products
+
+    }
+
+    selected_names = st.multiselect(
+        "Select Products",
+        list(product_map.keys()),
+        key="product_comparison_selection",
+    )
+
+    selected_ids = [
+
+        product_map[name]
+
+        for name in selected_names
+
+    ]
+
+    comparison = compare_products(
+        selected_ids
+    )
+
+    if comparison:
+
+        st.dataframe(
+            comparison,
+            use_container_width=True,
+        )
 
 
 # ============================================================
@@ -1077,51 +1903,44 @@ def product_search_interface():
 # ============================================================
 
 def delete_product_interface():
-    """Simple product deletion interface."""
-
-    st.subheader("🗑️ Delete Product")
+    """
+    Standalone delete interface.
+    """
 
     products = get_products()
 
     if not products:
-        st.info("No products available.")
+
+        st.info(
+            "No products available."
+        )
+
         return
 
-    options = {
-        (
-            f"{product.get('name', 'Unnamed')} "
-            f"| {product.get('category', '')} "
-            f"| {product.get('id', '')}"
-        ): product
+    product_map = {
+
+        f"{product.get('name')} "
+        f"({product.get('category')})":
+        product.get("id")
+
         for product in products
+
     }
 
-    selected_label = st.selectbox(
+    selected = st.selectbox(
         "Select Product",
-        list(options.keys()),
-        key="delete_product_selector",
+        list(product_map.keys()),
+        key="standalone_delete_product",
     )
-
-    selected_product = options[selected_label]
-
-    st.warning(
-        "You are about to permanently remove this "
-        "product from the library."
-    )
-
-    product_details(selected_product)
 
     if st.button(
         "🗑️ Delete Selected Product",
-        type="secondary",
-        key="delete_selected_product_button",
+        key="standalone_delete_button",
     ):
 
-        result = delete_product(
-            selected_product.get("id")
-        )
+        product_id = product_map[selected]
 
-        if result.get("success"):
+        if delete_product(product_id):
 
             st.success(
                 "Product deleted successfully."
@@ -1129,224 +1948,216 @@ def delete_product_interface():
 
             st.rerun()
 
-        else:
-
-            st.error(
-                result.get(
-                    "message",
-                    "Unable to delete product."
-                )
-            )
-
 
 # ============================================================
 # DATABASE MANAGEMENT
 # ============================================================
 
 def backup_database():
-    """Create a backup of persistent libraries."""
+    """
+    Create a backup.
+    """
+
     return backup_library()
 
 
 def database_management():
-    """Display persistent library management tools."""
+    """
+    Database management interface.
+    """
 
-    st.subheader("🗄️ Product Library Storage")
+    st.subheader(
+        "🗄️ Product Library Management"
+    )
 
     summary = get_library_summary()
 
     col1, col2 = st.columns(2)
 
     with col1:
+
         st.metric(
             "Total Products",
-            summary.get("total_products", 0),
+            summary.get(
+                "total_products",
+                0,
+            ),
         )
 
     with col2:
-        st.metric(
-            "Total Services",
-            summary.get("total_services", 0),
+
+        st.write(
+            "**Database Location:**"
         )
 
-    with st.expander("Storage Information"):
+        st.code(
+            summary.get(
+                "database_file",
+                ""
+            )
+        )
 
-        st.json(summary)
+    st.divider()
 
     if st.button(
         "💾 Create Library Backup",
-        key="create_library_backup_button",
+        key="create_library_backup",
     ):
 
-        result = backup_database()
+        try:
 
-        if result.get("success"):
+            backup_file = backup_database()
 
             st.success(
                 "Backup created successfully."
             )
 
-            if result.get("files"):
-                st.write("Backup files:")
-                st.write(result["files"])
+            st.code(
+                str(backup_file)
+            )
+
+        except Exception as error:
+
+            st.error(
+                f"Backup failed: {error}"
+            )
+
+    st.divider()
+
+    st.warning(
+        "Danger Zone"
+    )
+
+    if st.checkbox(
+        "I understand that this will delete "
+        "all products.",
+        key="confirm_clear_product_library",
+    ):
+
+        if st.button(
+            "⚠️ Clear Entire Product Library",
+            key="clear_entire_product_library",
+        ):
+
+            clear_product_library()
+
+            st.success(
+                "Product Library cleared."
+            )
+
+            st.rerun()
 
 
 # ============================================================
 # MAIN PRODUCT LIBRARY UI
 # ============================================================
 
-def display_product_library():
-    """Backward-compatible library display function."""
-    display_product_library_ui()
-
-
 def display_product_library_ui():
     """
-    Main persistent Product Library interface.
+    Main Product Library interface.
     """
 
     initialize_product_database()
 
-    st.title("📦 Solar PV Product Library")
-
-    st.caption(
-        "Create, store, search and manage solar PV "
-        "components in your persistent product library."
+    st.title(
+        "📦 Solar PV Product Library"
     )
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "➕ Add Product",
-        "📚 Product Library",
-        "🔎 Search & Filter",
-        "⚖️ Compare",
-        "🗄️ Storage",
-    ])
+    st.caption(
+        "Create, store, search, edit and manage "
+        "your Solar PV components."
+    )
 
-    with tab1:
+    summary = get_library_summary()
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.metric(
+            "Total Products",
+            summary.get(
+                "total_products",
+                0,
+            ),
+        )
+
+    with col2:
+
+        category_count = len(
+            summary.get(
+                "product_categories",
+                {}
+            )
+        )
+
+        st.metric(
+            "Categories Used",
+            category_count,
+        )
+
+    with col3:
+
+        st.metric(
+            "Database",
+            "SQLite",
+        )
+
+    st.divider()
+
+    tabs = st.tabs(
+        [
+            "➕ Add Product",
+            "📚 Product Library",
+            "🔍 Search",
+            "⚖️ Compare",
+            "🗄️ Database",
+        ]
+    )
+
+    with tabs[0]:
+
         add_product_form()
 
-    with tab2:
+    with tabs[1]:
 
-        st.subheader("📚 Saved Products")
+        st.subheader(
+            "📚 Your Product Library"
+        )
 
-        products = get_products()
+        display_product_library()
 
-        if not products:
+    with tabs[2]:
 
-            st.info(
-                "No products found in the library."
-            )
-
-        else:
-
-            categories = sorted(
-                {
-                    product.get(
-                        "category",
-                        "Other"
-                    )
-                    for product in products
-                }
-            )
-
-            selected_category = st.selectbox(
-                "Display Category",
-                ["All"] + categories,
-                key="product_library_display_category",
-            )
-
-            if selected_category != "All":
-
-                products = [
-                    product
-                    for product in products
-                    if product.get("category")
-                    == selected_category
-                ]
-
-            st.write(
-                f"### {len(products)} Product(s)"
-            )
-
-            display_rows = []
-
-            for product in products:
-
-                display_rows.append({
-                    "Name": product.get("name"),
-                    "Category": product.get(
-                        "category"
-                    ),
-                    "Manufacturer": product.get(
-                        "manufacturer"
-                    ),
-                    "Model": product.get("model"),
-                    "Technology": product.get(
-                        "technology"
-                    ),
-                    "Power (W)": product.get(
-                        "rated_power_w"
-                    ),
-                    "Voltage (V)": product.get(
-                        "voltage_v"
-                    ),
-                    "Capacity (Ah)": product.get(
-                        "capacity_ah"
-                    ),
-                    "Energy (kWh)": product.get(
-                        "energy_kwh"
-                    ),
-                    "Price": product.get(
-                        "price"
-                    ),
-                    "Currency": product.get(
-                        "currency"
-                    ),
-                })
-
-            st.dataframe(
-                display_rows,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            st.divider()
-
-            selected_product_name = st.selectbox(
-                "Inspect Product",
-                [
-                    (
-                        f"{product.get('name')} "
-                        f"| {product.get('id')}"
-                    )
-                    for product in products
-                ],
-                key="product_details_selector",
-            )
-
-            selected_id = selected_product_name.split(
-                "|"
-            )[-1].strip()
-
-            selected_product = get_product(
-                selected_id
-            )
-
-            if selected_product:
-                product_details(selected_product)
-
-    with tab3:
         product_search_interface()
 
-    with tab4:
+    with tabs[3]:
+
         product_comparison()
 
-    with tab5:
+    with tabs[4]:
+
         database_management()
 
 
 # ============================================================
-# RUN INITIALIZATION
+# BACKWARD COMPATIBILITY
 # ============================================================
 
-initialize_product_database()
+def display_management_ui():
+
+    database_management()
+
+
+# Legacy aliases
+
+database_search_products = search_products
+
+
+# ============================================================
+# MODULE TEST
+# ============================================================
+
+if __name__ == "__main__":
+
+    display_product_library_ui()
