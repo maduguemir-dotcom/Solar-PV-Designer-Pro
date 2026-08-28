@@ -704,7 +704,103 @@ def display_product_management_ui():
     # ------------------------------------------------------
 
     products = get_products()
+# ==========================================================
+# TEMPORARY DATABASE TEST
+# ==========================================================
 
+st.divider()
+
+st.subheader("🧪 Database Connection Test")
+
+if st.button(
+    "➕ Create Test 550W Solar Panel",
+    key="create_test_product"
+):
+
+    try:
+
+        from library_store import (
+            add_product_to_library
+        )
+
+        test_product = {
+
+            "id": "test_panel_550w",
+
+            "name":
+                "Test 550W Solar Panel",
+
+            "category":
+                "Solar Panel",
+
+            "manufacturer":
+                "Test Manufacturer",
+
+            "model":
+                "TEST-550",
+
+            "technology":
+                "Monocrystalline",
+
+            "rated_power_w":
+                550,
+
+            "voltage_v":
+                41.5,
+
+            "current_a":
+                13.2,
+
+            "efficiency_percent":
+                21.5,
+
+            "warranty_years":
+                10,
+
+            "price":
+                150,
+
+            "currency":
+                "USD",
+
+            "quantity":
+                1,
+
+            "notes":
+                "Test product created directly "
+                "from Product Management UI.",
+
+            "capacity_ah":
+                0,
+
+            "energy_kwh":
+                0,
+
+            "supplier":
+                "",
+
+            "country":
+                "",
+
+            "specifications":
+                {}
+        }
+
+        add_product_to_library(
+            test_product
+        )
+
+        st.success(
+            "✅ Test product created successfully."
+        )
+
+        st.rerun()
+
+    except Exception as error:
+
+        st.error(
+            f"Unable to create test product: {error}"
+        )
     summary = get_product_library_summary()
 
     # ------------------------------------------------------
