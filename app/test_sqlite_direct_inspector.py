@@ -2,6 +2,13 @@ import streamlit as st
 import sqlite3
 from pathlib import Path
 
+# IMPORTANT:
+# Import library_store FIRST.
+# This automatically initializes the SQLite database.
+
+import library_store
+
+
 st.set_page_config(
     page_title="Direct SQLite Inspector",
     layout="wide",
@@ -9,35 +16,79 @@ st.set_page_config(
 
 st.title("🔬 Direct SQLite Database Inspector")
 
+
 # ==========================================================
-# DATABASE PATH
+# DATABASE PATH FROM THE REAL STORAGE ENGINE
 # ==========================================================
 
-APP_DIR = Path(__file__).resolve().parent
-DATA_DIR = APP_DIR / "data"
-DB_PATH = DATA_DIR / "solar_pv_library.db"
+DB_PATH = Path(
+    library_store.DATABASE_FILE
+).resolve()
+
 
 st.subheader("1. Database Location")
 
 st.code(str(DB_PATH))
 
-st.write("Exists:", DB_PATH.exists())
-
-if not DB_PATH.exists():
-    st.error("Database file does not exist.")
-    st.stop()
-
 st.write(
-    "Database size:",
-    DB_PATH.stat().st_size,
-    "bytes"
+    "Database exists:",
+    DB_PATH.exists()
 )
 
+if DB_PATH.exists():
+
+    st.write(
+        "Database size:",
+        DB_PATH.stat().st_size,
+        "bytes"
+    )
+
+else:
+
+    st.error(
+        "Database file was not created."
+    )
+
+    st.stop()
+
+
 # ==========================================================
-# DIRECT CONNECTION
+# INITIALIZE AGAIN FOR SAFETY
 # ==========================================================
 
-st.subheader("2. SQLite Tables")
+st.subheader("2. Initialize Database")
+
+try:
+
+    result = (
+        library_store.initialize_database()
+    )
+
+    st.success(
+        "Database initialized successfully."
+    )
+
+    st.write(
+        "Initialization result:",
+        result
+    )
+
+except Exception as e:
+
+    st.error(
+        f"Database initialization failed: {e}"
+    )
+
+    st.stop()
+
+
+# ==========================================================
+# DIRECT SQLITE CONNECTION
+# ==========================================================
+
+st.subheader(
+    "3. SQLite Tables"
+)
 
 try:
 
@@ -51,7 +102,7 @@ try:
         """
         SELECT name
         FROM sqlite_master
-        WHERE type='table'
+        WHERE type = 'table'
         ORDER BY name
         """
     )
@@ -59,11 +110,13 @@ try:
     tables = cursor.fetchall()
 
     table_names = [
-        table[0]
-        for table in tables
+        row[0]
+        for row in tables
     ]
 
-    st.success("Database opened successfully.")
+    st.success(
+        "SQLite database opened successfully."
+    )
 
     st.write(
         "Tables found:",
@@ -73,7 +126,7 @@ try:
 except Exception as e:
 
     st.error(
-        f"Database connection failed: {e}"
+        f"SQLite connection error: {e}"
     )
 
     st.stop()
@@ -83,42 +136,17 @@ except Exception as e:
 # PRODUCTS TABLE
 # ==========================================================
 
-st.subheader("3. Products Table Inspection")
+st.subheader(
+    "4. Products Table"
+)
 
 if "products" not in table_names:
 
     st.error(
-        "The 'products' table does not exist."
+        "Products table does not exist."
     )
 
 else:
-
-    # ------------------------------------------------------
-    # TABLE STRUCTURE
-    # ------------------------------------------------------
-
-    st.markdown("### Products Table Structure")
-
-    cursor.execute(
-        """
-        PRAGMA table_info(products)
-        """
-    )
-
-    columns = cursor.fetchall()
-
-    column_names = [
-        column[1]
-        for column in columns
-    ]
-
-    st.write(column_names)
-
-    # ------------------------------------------------------
-    # ROW COUNT
-    # ------------------------------------------------------
-
-    st.markdown("### Product Count")
 
     cursor.execute(
         """
@@ -127,30 +155,39 @@ else:
         """
     )
 
-    product_count = cursor.fetchone()[0]
+    product_count = (
+        cursor.fetchone()[0]
+    )
 
     st.metric(
         "Products Stored",
         product_count
     )
 
-    # ------------------------------------------------------
-    # RAW PRODUCTS
-    # ------------------------------------------------------
-
-    st.markdown("### Raw Product Records")
-
     cursor.execute(
         """
         SELECT *
         FROM products
-        ORDER BY name ASC
+        ORDER BY name
         """
     )
 
     rows = cursor.fetchall()
 
     if rows:
+
+        cursor.execute(
+            """
+            PRAGMA table_info(products)
+            """
+        )
+
+        columns = cursor.fetchall()
+
+        column_names = [
+            column[1]
+            for column in columns
+        ]
 
         products = []
 
@@ -163,7 +200,9 @@ else:
                 )
             )
 
-            products.append(product)
+            products.append(
+                product
+            )
 
         st.success(
             f"{len(products)} product(s) found."
@@ -173,66 +212,20 @@ else:
 
     else:
 
-        st.warning(
-            "The products table exists but contains zero records."
+        st.info(
+            "No products currently stored."
         )
 
 
 # ==========================================================
-# SERVICES TABLE
-# ==========================================================
-
-st.subheader("4. Services Table Inspection")
-
-if "services" not in table_names:
-
-    st.warning(
-        "The 'services' table does not exist."
-    )
-
-else:
-
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM services
-        """
-    )
-
-    service_count = cursor.fetchone()[0]
-
-    st.metric(
-        "Services Stored",
-        service_count
-    )
-
-
-# ==========================================================
-# DATABASE MODULE COMPARISON
+# TEST library_store
 # ==========================================================
 
 st.subheader(
-    "5. Compare With library_store.py"
+    "5. Test library_store"
 )
 
 try:
-
-    import library_store
-
-    st.code(
-        str(
-            Path(
-                library_store.DATABASE_FILE
-            ).resolve()
-        )
-    )
-
-    st.write(
-        "Same database path:",
-        Path(
-            library_store.DATABASE_FILE
-        ).resolve() == DB_PATH.resolve()
-    )
 
     products = (
         library_store.load_product_library()
@@ -240,7 +233,7 @@ try:
 
     st.write(
         "Products returned by "
-        "library_store:",
+        "load_product_library():",
         len(products)
     )
 
@@ -248,22 +241,135 @@ try:
 
         st.json(products)
 
+    else:
+
+        st.info(
+            "library_store currently returns "
+            "an empty product library."
+        )
+
 except Exception as e:
 
     st.error(
-        f"library_store comparison failed: {e}"
+        f"library_store error: {e}"
     )
 
 
 # ==========================================================
-# FINISH
+# CREATE TEST PRODUCT
+# ==========================================================
+
+st.subheader(
+    "6. Create Test Product"
+)
+
+st.write(
+    "Use this only to confirm that SQLite "
+    "storage works in the CURRENT deployment."
+)
+
+if st.button(
+    "➕ Create Test 550W Solar Panel",
+    type="primary"
+):
+
+    test_product = {
+
+        "id": "test_panel_550w",
+
+        "name":
+            "Test 550W Solar Panel",
+
+        "category":
+            "Solar Panel",
+
+        "manufacturer":
+            "Test Manufacturer",
+
+        "model":
+            "TEST-550",
+
+        "technology":
+            "Monocrystalline",
+
+        "rated_power_w":
+            550,
+
+        "voltage_v":
+            41.5,
+
+        "current_a":
+            13.2,
+
+        "efficiency_percent":
+            21.5,
+
+        "warranty_years":
+            10,
+
+        "price":
+            150,
+
+        "currency":
+            "USD",
+
+        "quantity":
+            1,
+
+        "notes":
+            "SQLite storage test.",
+
+        "capacity_ah":
+            0,
+
+        "energy_kwh":
+            0,
+
+        "supplier":
+            "",
+
+        "country":
+            "",
+
+        "specifications":
+            {}
+    }
+
+    try:
+
+        saved_product = (
+            library_store
+            .add_product_to_library(
+                test_product
+            )
+        )
+
+        st.success(
+            "✅ Test product created successfully."
+        )
+
+        st.json(
+            saved_product
+        )
+
+        st.rerun()
+
+    except Exception as e:
+
+        st.error(
+            f"Unable to create test product: {e}"
+        )
+
+
+# ==========================================================
+# CLEAN UP
 # ==========================================================
 
 connection.close()
 
 st.divider()
 
-st.info(
-    "This test reads the SQLite database directly without "
-    "depending on product_ui.py or product_management_ui.py."
+st.caption(
+    "This diagnostic uses the same "
+    "library_store.py storage engine as the application."
 )
