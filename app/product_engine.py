@@ -1,58 +1,44 @@
-"""
-==========================================================
-SOLAR PV DESIGNER PRO AFRICA™
-PRODUCT ENGINE
-==========================================================
-
-Engineering/service layer between the Product UI and the
-central SQLite Product Library.
-
-Storage authority:
-    library_store.py
-        ↓
-    app/data/solar_pv_library.db
-
-This module does NOT maintain a second product database.
-==========================================================
-"""
+# ==========================================================
+# SOLAR PV DESIGNER PRO AFRICA™
+# PRODUCT ENGINE
+#
+# Version: 2.4.1
+#
+# Purpose:
+# - Product creation and normalization
+# - Product validation
+# - SQLite-backed product storage
+# - Product search
+# - Product filtering
+# - Product ranking
+# - Product comparison
+# - Product analysis
+# - Backward compatibility with product_ui.py
+#
+# IMPORTANT:
+# This module does NOT create a second database.
+# All persistent product storage is delegated to
+# library_store.py.
+# ==========================================================
 
 from copy import deepcopy
+from datetime import datetime
+import json
 
 
 # ==========================================================
-# CENTRAL STORAGE
+# LIBRARY STORE
 # ==========================================================
 
 try:
-    from library_store import (
-        initialize_database,
-        load_product_library,
-        add_product_to_library,
-        update_product_in_library,
-        remove_product_from_library,
-        get_product_from_library,
-        search_product_library,
-        get_product_library_summary,
-        backup_library,
-    )
-except Exception as exc:
-    initialize_database = None
-    load_product_library = None
-    add_product_to_library = None
-    update_product_in_library = None
-    remove_product_from_library = None
-    get_product_from_library = None
-    search_product_library = None
-    get_product_library_summary = None
-    backup_library = None
+    import library_store
 
-    _STORAGE_IMPORT_ERROR = exc
-else:
-    _STORAGE_IMPORT_ERROR = None
+except Exception:
+    library_store = None
 
 
 # ==========================================================
-# PRODUCT CATEGORIES
+# CONSTANTS
 # ==========================================================
 
 PRODUCT_CATEGORIES = [
@@ -60,343 +46,462 @@ PRODUCT_CATEGORIES = [
     "Battery",
     "Inverter",
     "Charge Controller",
-    "Mounting Structure",
     "Solar Cable",
     "Protection",
-    "Labour & Services",
-    "Transport & Logistics",
+    "Mounting Structure",
     "Other",
 ]
 
-
-# ==========================================================
-# PRODUCT TECHNOLOGIES
-# ==========================================================
 
 PRODUCT_TECHNOLOGIES = [
     "Monocrystalline",
     "Polycrystalline",
     "Thin Film",
-    "Lithium",
     "LiFePO4",
+    "Lithium-ion",
     "Lead Acid",
     "AGM",
     "Gel",
     "Hybrid",
-    "Off Grid",
-    "On Grid",
+    "On-grid",
+    "Off-grid",
     "MPPT",
     "PWM",
+    "Copper",
+    "Aluminium",
+    "Other",
+]
+
+
+CURRENCIES = [
+    "USD",
+    "UGX",
+    "NGN",
+    "EUR",
+    "GBP",
     "Other",
 ]
 
 
 # ==========================================================
-# UTILITY FUNCTIONS
+# DATABASE COMPATIBILITY CONSTANTS
 # ==========================================================
 
-def safe_float(value, default=0.0):
-    """Safely convert a value to float."""
+if library_store is not None:
+
+    DATABASE_FILE = getattr(
+        library_store,
+        "DATABASE_FILE",
+        None,
+    )
+
+    DB_PATH = getattr(
+        library_store,
+        "DB_PATH",
+        DATABASE_FILE,
+    )
+
+    PRODUCT_LIBRARY_FILE = getattr(
+        library_store,
+        "PRODUCT_LIBRARY_FILE",
+        DATABASE_FILE,
+    )
+
+else:
+
+    DATABASE_FILE = None
+
+    DB_PATH = None
+
+    PRODUCT_LIBRARY_FILE = None
+
+
+# ==========================================================
+# SAFE VALUE FUNCTIONS
+# ==========================================================
+
+def safe_float(
+    value,
+    default=0.0,
+):
+    """
+    Safely convert a value to float.
+    """
 
     try:
-        if value is None or value == "":
-            return float(default)
+
+        if value is None:
+            return default
+
+        if isinstance(value, str):
+
+            value = value.strip()
+
+            if not value:
+                return default
+
+            value = value.replace(",", "")
 
         return float(value)
 
-    except (TypeError, ValueError):
-        return float(default)
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return default
 
 
-def safe_int(value, default=0):
-    """Safely convert a value to integer."""
+def safe_int(
+    value,
+    default=0,
+):
+    """
+    Safely convert a value to integer.
+    """
 
     try:
-        if value is None or value == "":
-            return int(default)
+
+        if value is None:
+            return default
+
+        if isinstance(value, str):
+
+            value = value.strip()
+
+            if not value:
+                return default
+
+            value = value.replace(",", "")
 
         return int(float(value))
 
-    except (TypeError, ValueError):
-        return int(default)
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return default
 
 
-def _storage_ready():
-    """Return True when the storage engine is available."""
+def _safe_text(
+    value,
+    default="",
+):
+    """
+    Safely convert a value to text.
+    """
 
-    return (
-        _STORAGE_IMPORT_ERROR is None
-        and callable(initialize_database)
-    )
+    if value is None:
+        return default
+
+    return str(value).strip()
 
 
 # ==========================================================
 # DATABASE INITIALIZATION
 # ==========================================================
 
-def initialize_product_database():
+def initialize_database():
     """
     Initialize the central SQLite database.
+
+    Delegates completely to library_store.py.
     """
 
-    if not _storage_ready():
+    if library_store is None:
         return False
 
-    try:
-        return bool(
-            initialize_database()
-        )
+    function = getattr(
+        library_store,
+        "initialize_database",
+        None,
+    )
 
-    except Exception:
-        return False
+    if callable(function):
+
+        return function()
+
+    return False
+
+
+def initialize_product_database():
+    """
+    Backward-compatible alias.
+    """
+
+    return initialize_database()
 
 
 # ==========================================================
-# NORMALIZATION
+# PRODUCT ID
 # ==========================================================
 
-def normalize_product(product):
+def generate_product_id(
+    product=None,
+):
     """
-    Normalize a product without destroying category-specific
-    specifications.
+    Generate a unique product ID.
+
+    If the product already has an ID,
+    preserve it.
     """
 
-    if not isinstance(product, dict):
-        return {}
+    product = product or {}
 
-    item = deepcopy(product)
+    existing_id = product.get(
+        "id"
+    )
 
-    defaults = {
-        "id": "",
-        "name": "",
-        "category": "Other",
-        "manufacturer": "",
-        "model": "",
-        "technology": "Other",
+    if existing_id:
 
-        "rated_power_w": 0.0,
-        "voltage_v": 0.0,
-        "current_a": 0.0,
+        return str(existing_id)
 
-        "capacity_ah": 0.0,
-        "energy_kwh": 0.0,
+    timestamp = datetime.now().strftime(
+        "%Y%m%d%H%M%S%f"
+    )
 
-        "efficiency_percent": 0.0,
-        "warranty_years": 0.0,
+    return (
+        f"product_{timestamp}"
+    )
 
-        "price": 0.0,
-        "currency": "USD",
-        "quantity": 1,
 
-        "supplier": "",
-        "country": "",
-        "notes": "",
+# ==========================================================
+# PRODUCT NORMALIZATION
+# ==========================================================
 
-        "specifications": {},
-    }
+def normalize_product(
+    product=None,
+):
+    """
+    Normalize a product into the common
+    Solar PV Designer Pro structure.
 
-    for key, default in defaults.items():
+    Additional fields are preserved.
+    """
 
-        if key not in item:
-            item[key] = default
+    if product is None:
+        product = {}
 
     if not isinstance(
-        item.get("specifications"),
-        dict
+        product,
+        dict,
     ):
-        item["specifications"] = {}
+        product = dict(product)
 
-    item["name"] = str(
-        item.get("name", "")
-    ).strip()
+    source = dict(product)
 
-    item["category"] = str(
-        item.get("category", "Other")
-    ).strip() or "Other"
+    normalized = {
 
-    item["manufacturer"] = str(
-        item.get("manufacturer", "")
-    ).strip()
+        "id":
+            generate_product_id(
+                source
+            ),
 
-    item["model"] = str(
-        item.get("model", "")
-    ).strip()
-
-    item["technology"] = str(
-        item.get("technology", "Other")
-    ).strip() or "Other"
-
-    item["supplier"] = str(
-        item.get("supplier", "")
-    ).strip()
-
-    item["country"] = str(
-        item.get("country", "")
-    ).strip()
-
-    item["notes"] = str(
-        item.get("notes", "")
-    ).strip()
-
-    item["rated_power_w"] = safe_float(
-        item.get("rated_power_w")
-    )
-
-    item["voltage_v"] = safe_float(
-        item.get("voltage_v")
-    )
-
-    item["current_a"] = safe_float(
-        item.get("current_a")
-    )
-
-    item["capacity_ah"] = safe_float(
-        item.get("capacity_ah")
-    )
-
-    item["energy_kwh"] = safe_float(
-        item.get("energy_kwh")
-    )
-
-    item["efficiency_percent"] = safe_float(
-        item.get("efficiency_percent")
-    )
-
-    item["warranty_years"] = safe_float(
-        item.get("warranty_years")
-    )
-
-    item["price"] = safe_float(
-        item.get("price")
-    )
-
-    item["quantity"] = safe_float(
-        item.get("quantity"),
-        1
-    )
-
-    item["currency"] = str(
-        item.get("currency", "USD")
-    ).strip() or "USD"
-
-    return item
-
-
-# ==========================================================
-# VALIDATION
-# ==========================================================
-
-def validate_product(product):
-    """
-    Validate a product before it enters the library.
-    """
-
-    product = normalize_product(product)
-
-    errors = []
-
-    if not product.get("name"):
-        errors.append(
-            "Product name is required."
-        )
-
-    category = product.get(
-        "category",
-        "Other"
-    )
-
-    specs = product.get(
-        "specifications",
-        {}
-    )
-
-    if category == "Solar Panel":
-
-        power = safe_float(
-            specs.get(
-                "rated_power_w",
-                product.get(
-                    "rated_power_w",
-                    0
+        "name":
+            _safe_text(
+                source.get(
+                    "name",
+                    source.get(
+                        "product_name",
+                        "",
+                    ),
                 )
-            )
-        )
+            ),
 
-        if power <= 0:
-            errors.append(
-                "Solar panel rated power must be greater than zero."
-            )
+        "category":
+            _safe_text(
+                source.get(
+                    "category",
+                    "Other",
+                ),
+                "Other",
+            ),
 
-    elif category == "Battery":
+        "manufacturer":
+            _safe_text(
+                source.get(
+                    "manufacturer",
+                    "",
+                )
+            ),
 
-        capacity = safe_float(
-            specs.get(
-                "capacity_ah",
-                product.get(
+        "model":
+            _safe_text(
+                source.get(
+                    "model",
+                    "",
+                )
+            ),
+
+        "technology":
+            _safe_text(
+                source.get(
+                    "technology",
+                    "",
+                )
+            ),
+
+        "rated_power_w":
+            safe_float(
+                source.get(
+                    "rated_power_w",
+                    source.get(
+                        "power",
+                        0,
+                    ),
+                )
+            ),
+
+        "voltage_v":
+            safe_float(
+                source.get(
+                    "voltage_v",
+                    source.get(
+                        "voltage",
+                        source.get(
+                            "nominal_voltage_v",
+                            0,
+                        ),
+                    ),
+                )
+            ),
+
+        "current_a":
+            safe_float(
+                source.get(
+                    "current_a",
+                    source.get(
+                        "current",
+                        0,
+                    ),
+                )
+            ),
+
+        "capacity_ah":
+            safe_float(
+                source.get(
                     "capacity_ah",
-                    0
+                    0,
                 )
-            )
-        )
+            ),
 
-        if capacity <= 0:
-            errors.append(
-                "Battery capacity must be greater than zero."
-            )
-
-    elif category == "Inverter":
-
-        power = safe_float(
-            specs.get(
-                "rated_power_w",
-                product.get(
-                    "rated_power_w",
-                    0
+        "energy_kwh":
+            safe_float(
+                source.get(
+                    "energy_kwh",
+                    0,
                 )
-            )
-        )
+            ),
 
-        if power <= 0:
-            errors.append(
-                "Inverter rated power must be greater than zero."
-            )
+        "efficiency_percent":
+            safe_float(
+                source.get(
+                    "efficiency_percent",
+                    source.get(
+                        "efficiency",
+                        0,
+                    ),
+                )
+            ),
 
-    elif category == "Charge Controller":
+        "warranty_years":
+            safe_float(
+                source.get(
+                    "warranty_years",
+                    source.get(
+                        "warranty",
+                        0,
+                    ),
+                )
+            ),
 
-        current = safe_float(
-            specs.get(
-                "max_charge_current_a",
-                0
-            )
-        )
+        "supplier":
+            _safe_text(
+                source.get(
+                    "supplier",
+                    "",
+                )
+            ),
 
-        if current <= 0:
-            errors.append(
-                "Charge-controller current must be greater than zero."
-            )
+        "country":
+            _safe_text(
+                source.get(
+                    "country",
+                    "",
+                )
+            ),
 
-    return {
-        "valid": len(errors) == 0,
-        "message": (
-            "Product is valid."
-            if not errors
-            else " ".join(errors)
-        ),
-        "errors": errors,
-        "product": product,
+        "price":
+            safe_float(
+                source.get(
+                    "price",
+                    0,
+                )
+            ),
+
+        "currency":
+            _safe_text(
+                source.get(
+                    "currency",
+                    "USD",
+                ),
+                "USD",
+            ),
+
+        "quantity":
+            max(
+                1,
+                safe_int(
+                    source.get(
+                        "quantity",
+                        1,
+                    ),
+                    1,
+                ),
+            ),
+
+        "notes":
+            _safe_text(
+                source.get(
+                    "notes",
+                    "",
+                )
+            ),
+
+        "specifications":
+            deepcopy(
+                source.get(
+                    "specifications",
+                    {},
+                )
+            ),
     }
 
+    # ------------------------------------------------------
+    # Preserve every additional field.
+    # ------------------------------------------------------
+
+    for key, value in source.items():
+
+        if key not in normalized:
+
+            normalized[key] = value
+
+    return normalized
+
 
 # ==========================================================
-# CREATE PRODUCT
+# PRODUCT CREATION
 # ==========================================================
 
-def create_product(**kwargs):
+def create_product(
+    **kwargs,
+):
     """
-    Build and validate a product record.
+    Create and normalize a product.
 
-    This function does not automatically write to SQLite.
-    Use add_product() to persist it.
+    This function does not save the product.
     """
 
     product = normalize_product(
@@ -410,88 +515,301 @@ def create_product(**kwargs):
     if not validation["valid"]:
 
         return {
-            "success": False,
-            "message": validation["message"],
-            "product": None,
+
+            "success":
+                False,
+
+            "message":
+                validation["message"],
+
+            "product":
+                product,
+
+            "errors":
+                validation["errors"],
+        }
+
+    return product
+
+
+# ==========================================================
+# PRODUCT VALIDATION
+# ==========================================================
+
+def validate_product(
+    product,
+):
+    """
+    Validate a product before saving.
+    """
+
+    if not isinstance(
+        product,
+        dict,
+    ):
+
+        return {
+
+            "valid":
+                False,
+
+            "message":
+                "Product must be a dictionary.",
+
+            "errors":
+                [
+                    "Invalid product data."
+                ],
+        }
+
+    errors = []
+
+    name = _safe_text(
+        product.get(
+            "name"
+        )
+    )
+
+    category = _safe_text(
+        product.get(
+            "category",
+            "Other",
+        ),
+        "Other",
+    )
+
+    if not name:
+
+        errors.append(
+            "Product name is required."
+        )
+
+    if not category:
+
+        errors.append(
+            "Product category is required."
+        )
+
+    # ------------------------------------------------------
+    # Category-specific validation
+    # ------------------------------------------------------
+
+    if category == "Solar Panel":
+
+        if safe_float(
+            product.get(
+                "rated_power_w"
+            )
+        ) <= 0:
+
+            errors.append(
+                "Solar panel rated power must be greater than zero."
+            )
+
+    elif category == "Battery":
+
+        if safe_float(
+            product.get(
+                "capacity_ah"
+            )
+        ) <= 0:
+
+            errors.append(
+                "Battery capacity must be greater than zero."
+            )
+
+    elif category == "Inverter":
+
+        if safe_float(
+            product.get(
+                "rated_power_w"
+            )
+        ) <= 0:
+
+            errors.append(
+                "Inverter rated power must be greater than zero."
+            )
+
+    elif category == "Charge Controller":
+
+        specifications = (
+            product.get(
+                "specifications"
+            )
+            or {}
+        )
+
+        charge_current = safe_float(
+            specifications.get(
+                "max_charge_current_a",
+                product.get(
+                    "max_charge_current_a",
+                    0,
+                ),
+            )
+        )
+
+        if charge_current <= 0:
+
+            errors.append(
+                "Charge-controller current must be greater than zero."
+            )
+
+    if errors:
+
+        return {
+
+            "valid":
+                False,
+
+            "message":
+                errors[0],
+
+            "errors":
+                errors,
         }
 
     return {
-        "success": True,
-        "message": "Product created successfully.",
-        "product": product,
+
+        "valid":
+            True,
+
+        "message":
+            "Product is valid.",
+
+        "errors":
+            [],
     }
 
 
-# ==========================================================
-# GET PRODUCTS
-# ==========================================================
-
-def get_products():
+def validate_category_fields(
+    category,
+    specifications,
+):
     """
-    Return all products from the central SQLite library.
-    """
-
-    if not _storage_ready():
-        return []
-
-    try:
-
-        initialize_product_database()
-
-        products = load_product_library()
-
-        if not isinstance(products, list):
-            return []
-
-        return [
-            normalize_product(product)
-            for product in products
-            if isinstance(product, dict)
-        ]
-
-    except Exception:
-        return []
-
-
-# ==========================================================
-# GET PRODUCT
-# ==========================================================
-
-def get_product(product_id):
-    """
-    Retrieve one product by its database ID.
+    Validate category-specific specifications.
     """
 
-    if not _storage_ready():
-        return None
-
-    try:
-
-        initialize_product_database()
-
-        product = get_product_from_library(
-            product_id
+    specifications = (
+        specifications
+        if isinstance(
+            specifications,
+            dict,
         )
+        else {}
+    )
 
-        if product is None:
-            return None
+    errors = []
 
-        return normalize_product(
-            product
-        )
+    if category == "Solar Panel":
 
-    except Exception:
-        return None
+        if safe_float(
+            specifications.get(
+                "rated_power_w",
+                0,
+            )
+        ) <= 0:
+
+            errors.append(
+                "Solar panel rated power must be greater than zero."
+            )
+
+    elif category == "Battery":
+
+        if safe_float(
+            specifications.get(
+                "capacity_ah",
+                0,
+            )
+        ) <= 0:
+
+            errors.append(
+                "Battery capacity must be greater than zero."
+            )
+
+    elif category == "Inverter":
+
+        if safe_float(
+            specifications.get(
+                "rated_power_w",
+                0,
+            )
+        ) <= 0:
+
+            errors.append(
+                "Inverter rated power must be greater than zero."
+            )
+
+    elif category == "Charge Controller":
+
+        if safe_float(
+            specifications.get(
+                "max_charge_current_a",
+                0,
+            )
+        ) <= 0:
+
+            errors.append(
+                "Charge-controller charge current must be greater than zero."
+            )
+
+    return errors
 
 
 # ==========================================================
 # ADD PRODUCT
 # ==========================================================
 
-def add_product(product):
+def add_product(
+    product=None,
+    **kwargs,
+):
     """
-    Validate and persist a product in SQLite.
+    Add a product to the central SQLite library.
+
+    Supports:
+
+        add_product(product)
+
+    and:
+
+        add_product(
+            name="550W Panel",
+            category="Solar Panel",
+        )
     """
+
+    if product is None:
+
+        product = kwargs
+
+    elif isinstance(
+        product,
+        dict,
+    ):
+
+        merged = dict(product)
+
+        merged.update(
+            kwargs
+        )
+
+        product = merged
+
+    else:
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "Product must be a dictionary.",
+        }
+
+    product = normalize_product(
+        product
+    )
 
     validation = validate_product(
         product
@@ -500,48 +818,238 @@ def add_product(product):
     if not validation["valid"]:
 
         return {
-            "success": False,
-            "message": validation["message"],
-            "product": None,
+
+            "success":
+                False,
+
+            "message":
+                validation["message"],
+
+            "errors":
+                validation["errors"],
+
+            "product":
+                product,
         }
 
-    if not _storage_ready():
+    if library_store is None:
 
         return {
-            "success": False,
-            "message": "Product storage engine is unavailable.",
-            "product": None,
+
+            "success":
+                False,
+
+            "message":
+                "library_store.py is unavailable.",
         }
 
-    try:
+    function = getattr(
+        library_store,
+        "add_product_to_library",
+        None,
+    )
 
-        initialize_product_database()
+    if not callable(function):
 
-        saved = add_product_to_library(
-            validation["product"]
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "add_product_to_library() is unavailable.",
+        }
+
+    saved = function(
+        product
+    )
+
+    # Keep the API useful for both old and new callers.
+    if isinstance(
+        saved,
+        dict,
+    ):
+
+        return saved
+
+    return product
+
+
+# ==========================================================
+# GET ALL PRODUCTS
+# ==========================================================
+
+def get_products():
+    """
+    Return all products from SQLite.
+    """
+
+    if library_store is None:
+
+        return []
+
+    initialize_database()
+
+    function = getattr(
+        library_store,
+        "load_product_library",
+        None,
+    )
+
+    if not callable(function):
+
+        return []
+
+    result = function()
+
+    if result is None:
+
+        return []
+
+    if isinstance(
+        result,
+        dict,
+    ):
+
+        result = result.get(
+            "products",
+            result.get(
+                "data",
+                [],
+            ),
         )
 
-        if isinstance(saved, dict):
+    if not isinstance(
+        result,
+        list,
+    ):
 
-            return {
-                "success": True,
-                "message": "Product added successfully.",
-                "product": saved,
-            }
+        return []
 
-        return {
-            "success": True,
-            "message": "Product added successfully.",
-            "product": validation["product"],
-        }
+    return [
+        normalize_loaded_product(product)
+        for product in result
+        if isinstance(
+            product,
+            dict,
+        )
+    ]
 
-    except Exception as exc:
 
-        return {
-            "success": False,
-            "message": str(exc),
-            "product": None,
-        }
+def load_products():
+    """
+    Backward-compatible alias.
+    """
+
+    return get_products()
+
+
+def list_products():
+    """
+    Backward-compatible alias.
+    """
+
+    return get_products()
+
+
+def normalize_loaded_product(
+    product,
+):
+    """
+    Normalize a product loaded from SQLite
+    without changing its database ID.
+    """
+
+    normalized = normalize_product(
+        product
+    )
+
+    if product.get(
+        "id"
+    ) is not None:
+
+        normalized["id"] = str(
+            product["id"]
+        )
+
+    # Preserve timestamps from SQLite.
+    if "created_at" in product:
+
+        normalized[
+            "created_at"
+        ] = product[
+            "created_at"
+        ]
+
+    if "updated_at" in product:
+
+        normalized[
+            "updated_at"
+        ] = product[
+            "updated_at"
+        ]
+
+    return normalized
+
+
+# ==========================================================
+# GET SINGLE PRODUCT
+# ==========================================================
+
+def get_product(
+    product_id,
+):
+    """
+    Retrieve one product by ID.
+    """
+
+    if not product_id:
+
+        return None
+
+    if library_store is None:
+
+        return None
+
+    function = getattr(
+        library_store,
+        "get_product_from_library",
+        None,
+    )
+
+    if callable(function):
+
+        result = function(
+            product_id
+        )
+
+        if isinstance(
+            result,
+            dict,
+        ):
+
+            return normalize_loaded_product(
+                result
+            )
+
+        if result is not None:
+
+            return result
+
+    # Fallback through loaded library.
+    for product in get_products():
+
+        if str(
+            product.get(
+                "id"
+            )
+        ) == str(
+            product_id
+        ):
+
+            return product
+
+    return None
 
 
 # ==========================================================
@@ -550,20 +1058,35 @@ def add_product(product):
 
 def update_product(
     product_id,
-    product=None,
+    updated_product=None,
     **kwargs,
 ):
     """
-    Update an existing SQLite product.
+    Update an existing product.
+
+    Supports both:
+
+        update_product(id, product)
+
+    and:
+
+        update_product(
+            id,
+            name="New Name",
+            price=200,
+        )
     """
 
-    if product is None:
-        product = {}
+    if not product_id:
 
-    if kwargs:
-        merged = dict(product)
-        merged.update(kwargs)
-        product = merged
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "Product ID is required.",
+        }
 
     existing = get_product(
         product_id
@@ -572,158 +1095,305 @@ def update_product(
     if existing is None:
 
         return {
-            "success": False,
-            "message": "Product not found.",
+
+            "success":
+                False,
+
+            "message":
+                "Product not found.",
         }
 
-    merged = dict(existing)
+    if updated_product is None:
+
+        updated_product = {}
+
+    if not isinstance(
+        updated_product,
+        dict,
+    ):
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "Updated product must be a dictionary.",
+        }
+
+    merged = dict(
+        existing
+    )
 
     merged.update(
-        product
+        updated_product
+    )
+
+    merged.update(
+        kwargs
     )
 
     merged["id"] = str(
         product_id
     )
 
-    validation = validate_product(
+    normalized = normalize_product(
         merged
+    )
+
+    validation = validate_product(
+        normalized
     )
 
     if not validation["valid"]:
 
         return {
-            "success": False,
-            "message": validation["message"],
+
+            "success":
+                False,
+
+            "message":
+                validation["message"],
+
+            "errors":
+                validation["errors"],
         }
 
-    if not _storage_ready():
+    if library_store is None:
 
         return {
-            "success": False,
-            "message": "Product storage engine is unavailable.",
+
+            "success":
+                False,
+
+            "message":
+                "library_store.py is unavailable.",
         }
 
-    try:
+    function = getattr(
+        library_store,
+        "update_product_in_library",
+        None,
+    )
 
-        initialize_product_database()
-
-        result = update_product_in_library(
-            product_id,
-            validation["product"]
-        )
-
-        if isinstance(result, bool):
-
-            success = result
-
-        elif isinstance(result, dict):
-
-            success = result.get(
-                "success",
-                True
-            )
-
-        else:
-
-            success = True
+    if not callable(function):
 
         return {
-            "success": bool(success),
-            "message": (
+
+            "success":
+                False,
+
+            "message":
+                "update_product_in_library() is unavailable.",
+        }
+
+    result = function(
+        product_id,
+        normalized,
+    )
+
+    if result is True:
+
+        return {
+
+            "success":
+                True,
+
+            "message":
+                "Product updated successfully.",
+
+            "product":
+                normalized,
+        }
+
+    if isinstance(
+        result,
+        dict,
+    ):
+
+        return result
+
+    return {
+
+        "success":
+            bool(result),
+
+        "message":
+            (
                 "Product updated successfully."
-                if success
+                if result
                 else "Unable to update product."
             ),
-            "product": validation["product"],
-        }
 
-    except Exception as exc:
+        "product":
+            normalized,
+    }
 
-        return {
-            "success": False,
-            "message": str(exc),
-        }
+
+def edit_product(
+    product_id,
+    updated_product=None,
+    **kwargs,
+):
+    """
+    Alias for update_product().
+    """
+
+    return update_product(
+        product_id,
+        updated_product,
+        **kwargs,
+    )
+
+
+def update_product_in_library(
+    product_id,
+    updated_product,
+):
+    """
+    Backward-compatible wrapper.
+    """
+
+    return update_product(
+        product_id,
+        updated_product,
+    )
 
 
 # ==========================================================
 # DELETE PRODUCT
 # ==========================================================
 
-def delete_product(product_id, **kwargs):
+def delete_product(
+    product_id,
+):
     """
-    Permanently remove a product from SQLite.
+    Delete a product from SQLite.
     """
 
-    if not _storage_ready():
+    if not product_id:
 
         return {
-            "success": False,
-            "message": "Product storage engine is unavailable.",
+
+            "success":
+                False,
+
+            "message":
+                "Product ID is required.",
         }
 
-    try:
-
-        initialize_product_database()
-
-        deleted = remove_product_from_library(
-            product_id
-        )
-
-        if isinstance(deleted, dict):
-            success = deleted.get(
-                "success",
-                False
-            )
-        else:
-            success = bool(
-                deleted
-            )
+    if library_store is None:
 
         return {
-            "success": success,
-            "message": (
+
+            "success":
+                False,
+
+            "message":
+                "library_store.py is unavailable.",
+        }
+
+    function = getattr(
+        library_store,
+        "remove_product_from_library",
+        None,
+    )
+
+    if not callable(function):
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "remove_product_from_library() is unavailable.",
+        }
+
+    result = function(
+        product_id
+    )
+
+    if isinstance(
+        result,
+        dict,
+    ):
+
+        return result
+
+    return {
+
+        "success":
+            bool(result),
+
+        "message":
+            (
                 "Product deleted successfully."
-                if success
+                if result
                 else "Product was not found."
             ),
-        }
+    }
 
-    except Exception as exc:
 
-        return {
-            "success": False,
-            "message": str(exc),
-        }
+def remove_product_from_library(
+    product_id,
+):
+    """
+    Backward-compatible alias.
+    """
+
+    return delete_product(
+        product_id
+    )
 
 
 # ==========================================================
-# SEARCH
+# SEARCH PRODUCTS
 # ==========================================================
 
 def search_products(
-    products=None,
-    query="",
+    products_or_query=None,
+    query=None,
 ):
     """
-    Search a supplied product list.
+    Flexible search function.
 
-    If products is omitted, search the central library.
+    Supported forms:
+
+        search_products("550W")
+
+        search_products(products, "550W")
+
     """
 
-    if products is None:
+    if isinstance(
+        products_or_query,
+        list,
+    ):
+
+        products = products_or_query
+
+        search_query = query
+
+    else:
 
         products = get_products()
 
-    if not isinstance(products, list):
-        return []
+        search_query = (
+            products_or_query
+            if query is None
+            else query
+        )
 
-    query = str(
-        query or ""
-    ).strip().lower()
+    q = _safe_text(
+        search_query
+    ).lower()
 
-    if not query:
-        return list(products)
+    if not q:
+
+        return list(
+            products
+        )
 
     results = []
 
@@ -731,26 +1401,86 @@ def search_products(
 
         if not isinstance(
             product,
-            dict
+            dict,
         ):
+
             continue
 
-        searchable = " ".join(
-            [
-                str(product.get("name", "")),
-                str(product.get("category", "")),
-                str(product.get("manufacturer", "")),
-                str(product.get("model", "")),
-                str(product.get("technology", "")),
-                str(product.get("supplier", "")),
-                str(product.get("country", "")),
-                str(product.get("notes", "")),
-                str(product.get("specifications", "")),
-            ]
-        ).lower()
+        searchable_fields = [
 
-        if query in searchable:
-            results.append(product)
+            product.get(
+                "name",
+                "",
+            ),
+
+            product.get(
+                "category",
+                "",
+            ),
+
+            product.get(
+                "manufacturer",
+                "",
+            ),
+
+            product.get(
+                "model",
+                "",
+            ),
+
+            product.get(
+                "technology",
+                "",
+            ),
+
+            product.get(
+                "supplier",
+                "",
+            ),
+
+            product.get(
+                "country",
+                "",
+            ),
+
+            product.get(
+                "notes",
+                "",
+            ),
+        ]
+
+        searchable_text = " ".join(
+            str(value)
+            for value in searchable_fields
+        )
+
+        specifications = product.get(
+            "specifications",
+            {},
+        )
+
+        try:
+
+            searchable_text += " "
+
+            searchable_text += json.dumps(
+                specifications,
+                ensure_ascii=False,
+            )
+
+        except Exception:
+
+            searchable_text += " "
+
+            searchable_text += str(
+                specifications
+            )
+
+        if q in searchable_text.lower():
+
+            results.append(
+                product
+            )
 
     return results
 
@@ -760,20 +1490,35 @@ def database_search_products(
     category="All",
 ):
     """
-    Search directly against the central product library.
+    Database-backed product search.
     """
 
     products = get_products()
 
-    if category and category != "All":
+    if (
+        category
+        and category != "All"
+    ):
 
         products = filter_products_by_category(
             products,
-            category
+            category,
         )
 
     return search_products(
         products,
+        query,
+    )
+
+
+def search_product_library(
+    query="",
+):
+    """
+    Compatibility wrapper.
+    """
+
+    return search_products(
         query
     )
 
@@ -783,28 +1528,68 @@ def database_search_products(
 # ==========================================================
 
 def filter_products_by_category(
-    products,
-    category,
+    products_or_category,
+    category=None,
 ):
-    """Filter products by category."""
+    """
+    Flexible category filter.
 
-    if not isinstance(products, list):
-        return []
+    Supported forms:
 
-    category = str(
-        category or ""
-    ).strip().lower()
+        filter_products_by_category(
+            products,
+            "Solar Panel",
+        )
+
+        filter_products_by_category(
+            "Solar Panel",
+        )
+    """
+
+    if isinstance(
+        products_or_category,
+        list,
+    ):
+
+        products = products_or_category
+
+        selected_category = category
+
+    else:
+
+        products = get_products()
+
+        selected_category = (
+            products_or_category
+            if category is None
+            else category
+        )
+
+    if (
+        not selected_category
+        or selected_category == "All"
+    ):
+
+        return list(
+            products
+        )
 
     return [
+
         product
+
         for product in products
+
         if str(
             product.get(
                 "category",
-                ""
+                "Other",
             )
         ).strip().lower()
-        == category
+        ==
+        str(
+            selected_category
+        ).strip().lower()
     ]
 
 
@@ -813,361 +1598,478 @@ def filter_products_by_category(
 # ==========================================================
 
 def filter_products_by_technology(
-    products,
-    technology,
+    products_or_technology,
+    technology=None,
 ):
-    """Filter products by technology."""
+    """
+    Flexible technology filter.
 
-    if not isinstance(products, list):
-        return []
+    Supported forms:
 
-    technology = str(
-        technology or ""
-    ).strip().lower()
+        filter_products_by_technology(
+            products,
+            "Monocrystalline",
+        )
+
+        filter_products_by_technology(
+            "Monocrystalline",
+        )
+    """
+
+    if isinstance(
+        products_or_technology,
+        list,
+    ):
+
+        products = products_or_technology
+
+        selected_technology = technology
+
+    else:
+
+        products = get_products()
+
+        selected_technology = (
+            products_or_technology
+            if technology is None
+            else technology
+        )
+
+    if (
+        not selected_technology
+        or selected_technology == "All"
+    ):
+
+        return list(
+            products
+        )
 
     return [
+
         product
+
         for product in products
+
         if str(
             product.get(
                 "technology",
-                ""
+                "",
             )
         ).strip().lower()
-        == technology
+        ==
+        str(
+            selected_technology
+        ).strip().lower()
     ]
 
 
 # ==========================================================
-# PRODUCT NAMES
+# REFRESH PRODUCT LIBRARY
 # ==========================================================
 
-def get_product_names(
-    products=None
-):
-    """Return product names."""
+def refresh_product_library():
 
-    if products is None:
-        products = get_products()
+    initialize_database()
 
-    if not isinstance(products, list):
-        return []
-
-    return [
-        str(product.get("name"))
-        for product in products
-        if isinstance(product, dict)
-        and product.get("name")
-    ]
+    return get_products()
 
 
 # ==========================================================
-# CATEGORY PRODUCTS
+# DEFAULT PRODUCTS
 # ==========================================================
 
-def get_products_by_category(
-    category
-):
-    """Return all products in one category."""
-
-    return filter_products_by_category(
-        get_products(),
-        category
-    )
+DEFAULT_PRODUCTS = []
 
 
-def get_solar_panels():
-    """Return solar panels."""
-
-    return get_products_by_category(
-        "Solar Panel"
-    )
-
-
-def get_batteries():
-    """Return batteries."""
-
-    return get_products_by_category(
-        "Battery"
-    )
-
-
-def get_inverters():
-    """Return inverters."""
-
-    return get_products_by_category(
-        "Inverter"
-    )
-
-
-def get_charge_controllers():
-    """Return charge controllers."""
-
-    return get_products_by_category(
-        "Charge Controller"
-    )
-
-
-# ==========================================================
-# PRODUCT SELECTION
-# ==========================================================
-
-def get_product_options(
-    category=None
-):
+def get_default_products():
     """
-    Return products suitable for a Streamlit selectbox.
+    Return default products.
+
+    Intentionally empty.
+
+    The production application must not insert
+    illustrative products into the user's real
+    product library automatically.
     """
 
-    products = (
-        get_products()
-        if category is None
-        else get_products_by_category(category)
+    return []
+
+
+# ==========================================================
+# LEGACY LIST-BASED ADD
+# ==========================================================
+
+def add_product_to_list(
+    products,
+    product,
+):
+    """
+    Legacy helper that adds a product to
+    an in-memory list without saving it.
+
+    This is kept for older tests.
+    """
+
+    if not isinstance(
+        products,
+        list,
+    ):
+
+        products = []
+
+    validation = validate_product(
+        product
     )
 
-    return [
-        {
-            "id": product.get("id"),
-            "name": product.get(
-                "name",
-                "Unnamed Product"
-            ),
-            "model": product.get(
-                "model",
-                ""
-            ),
-            "manufacturer": product.get(
-                "manufacturer",
-                ""
-            ),
-            "category": product.get(
-                "category",
-                "Other"
-            ),
+    if not validation["valid"]:
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                validation["message"],
+
+            "products":
+                products,
         }
-        for product in products
-    ]
+
+    products.append(
+        dict(product)
+    )
+
+    return {
+
+        "success":
+            True,
+
+        "message":
+            "Product added successfully.",
+
+        "products":
+            products,
+    }
 
 
 # ==========================================================
-# ENGINEERING HELPERS
+# LEGACY REMOVE PRODUCT
 # ==========================================================
 
-def get_panel_power_w(
-    product
+def remove_product(
+    products,
+    index,
 ):
     """
-    Return usable panel rated power.
+    Legacy in-memory list removal.
+
+    NOTE:
+    This function is deliberately different from
+    delete_product(), which deletes a database record.
     """
 
-    if not isinstance(product, dict):
-        return 0.0
+    if not isinstance(
+        products,
+        list,
+    ):
 
-    specs = product.get(
-        "specifications",
-        {}
-    )
+        return {
 
-    return safe_float(
-        specs.get(
-            "rated_power_w",
-            product.get(
-                "rated_power_w",
-                0
-            )
+            "success":
+                False,
+
+            "message":
+                "Product list is invalid.",
+
+            "products":
+                [],
+        }
+
+    try:
+
+        index = int(
+            index
         )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "Invalid product index.",
+
+            "products":
+                products,
+        }
+
+    if (
+        index < 0
+        or index >= len(products)
+    ):
+
+        return {
+
+            "success":
+                False,
+
+            "message":
+                "Invalid product index.",
+
+            "products":
+                products,
+        }
+
+    removed = products.pop(
+        index
     )
 
+    return {
 
-def get_panel_vmp_v(
-    product
-):
-    """Return panel Vmp."""
+        "success":
+            True,
 
-    if not isinstance(product, dict):
-        return 0.0
+        "message":
+            "Product removed successfully.",
 
-    specs = product.get(
-        "specifications",
-        {}
-    )
+        "removed":
+            removed,
 
-    return safe_float(
-        specs.get(
-            "vmp_v",
-            product.get(
-                "voltage_v",
-                0
-            )
-        )
-    )
-
-
-def get_panel_voc_v(
-    product
-):
-    """Return panel Voc."""
-
-    if not isinstance(product, dict):
-        return 0.0
-
-    specs = product.get(
-        "specifications",
-        {}
-    )
-
-    return safe_float(
-        specs.get(
-            "voc_v",
-            0
-        )
-    )
-
-
-def get_battery_voltage_v(
-    product
-):
-    """Return battery nominal voltage."""
-
-    if not isinstance(product, dict):
-        return 0.0
-
-    specs = product.get(
-        "specifications",
-        {}
-    )
-
-    return safe_float(
-        specs.get(
-            "nominal_voltage_v",
-            product.get(
-                "voltage_v",
-                0
-            )
-        )
-    )
-
-
-def get_battery_capacity_ah(
-    product
-):
-    """Return battery capacity."""
-
-    if not isinstance(product, dict):
-        return 0.0
-
-    specs = product.get(
-        "specifications",
-        {}
-    )
-
-    return safe_float(
-        specs.get(
-            "capacity_ah",
-            product.get(
-                "capacity_ah",
-                0
-            )
-        )
-    )
-
-
-def get_inverter_power_w(
-    product
-):
-    """Return inverter rated output power."""
-
-    if not isinstance(product, dict):
-        return 0.0
-
-    specs = product.get(
-        "specifications",
-        {}
-    )
-
-    return safe_float(
-        specs.get(
-            "rated_power_w",
-            product.get(
-                "rated_power_w",
-                0
-            )
-        )
-    )
+        "products":
+            products,
+    }
 
 
 # ==========================================================
 # PRODUCT REQUIREMENT MATCHING
 # ==========================================================
 
-def product_matches_requirements(
+def match_product_requirement(
     product,
     required_power_w=None,
     required_energy_kwh=None,
     required_voltage_v=None,
 ):
     """
-    Determine whether a product meets basic engineering
-    requirements.
+    Evaluate how well a product matches
+    engineering requirements.
+
+    Maximum score = 100.
     """
 
-    if not isinstance(product, dict):
-        return False
+    if not isinstance(
+        product,
+        dict,
+    ):
+
+        return {
+
+            "match":
+                False,
+
+            "score":
+                0,
+
+            "reasons":
+                [
+                    "Invalid product."
+                ],
+        }
+
+    score = 0
+
+    reasons = []
+
+    # ------------------------------------------------------
+    # POWER
+    # ------------------------------------------------------
 
     if required_power_w is not None:
 
-        power = get_panel_power_w(
-            product
+        required = safe_float(
+            required_power_w
         )
 
-        if power < safe_float(
-            required_power_w
-        ):
-            return False
+        available = safe_float(
+            product.get(
+                "rated_power_w",
+                0,
+            )
+        )
+
+        if required > 0:
+
+            if available >= required:
+
+                score += 40
+
+                reasons.append(
+                    "Rated power meets or exceeds requirement."
+                )
+
+            elif available > 0:
+
+                score += min(
+                    40,
+                    (
+                        available
+                        / required
+                    )
+                    * 40,
+                )
+
+                reasons.append(
+                    "Rated power is below the required value."
+                )
+
+            else:
+
+                reasons.append(
+                    "Rated power is not specified."
+                )
+
+    # ------------------------------------------------------
+    # ENERGY
+    # ------------------------------------------------------
 
     if required_energy_kwh is not None:
 
-        energy = safe_float(
+        required = safe_float(
+            required_energy_kwh
+        )
+
+        available = safe_float(
             product.get(
                 "energy_kwh",
-                0
+                0,
             )
         )
 
-        if energy < safe_float(
-            required_energy_kwh
-        ):
-            return False
+        if required > 0:
+
+            if available >= required:
+
+                score += 30
+
+                reasons.append(
+                    "Energy capacity meets or exceeds requirement."
+                )
+
+            elif available > 0:
+
+                score += min(
+                    30,
+                    (
+                        available
+                        / required
+                    )
+                    * 30,
+                )
+
+                reasons.append(
+                    "Energy capacity is below requirement."
+                )
+
+            else:
+
+                reasons.append(
+                    "Energy capacity is not specified."
+                )
+
+    # ------------------------------------------------------
+    # VOLTAGE
+    # ------------------------------------------------------
 
     if required_voltage_v is not None:
 
-        voltage = (
-            get_battery_voltage_v(
-                product
+        required = safe_float(
+            required_voltage_v
+        )
+
+        available = safe_float(
+            product.get(
+                "voltage_v",
+                0,
             )
         )
 
-        if voltage <= 0:
-            voltage = safe_float(
-                product.get(
-                    "voltage_v",
-                    0
+        if required > 0:
+
+            if available == required:
+
+                score += 30
+
+                reasons.append(
+                    "Voltage matches requirement."
                 )
-            )
 
-        if voltage <= 0:
-            return False
+            elif available > 0:
 
-        if abs(
-            voltage
-            - safe_float(required_voltage_v)
-        ) > max(
-            5.0,
-            safe_float(required_voltage_v) * 0.15
-        ):
-            return False
+                difference = abs(
+                    available
+                    - required
+                )
 
-    return True
+                tolerance = (
+                    required
+                    * 0.10
+                )
+
+                if difference <= tolerance:
+
+                    score += 20
+
+                    reasons.append(
+                        "Voltage is within 10% of requirement."
+                    )
+
+                else:
+
+                    reasons.append(
+                        "Voltage does not match requirement."
+                    )
+
+            else:
+
+                reasons.append(
+                    "Voltage is not specified."
+                )
+
+    # ------------------------------------------------------
+    # No engineering requirements supplied
+    # ------------------------------------------------------
+
+    if (
+        required_power_w is None
+        and required_energy_kwh is None
+        and required_voltage_v is None
+    ):
+
+        score = 0
+
+        reasons.append(
+            "No engineering requirements were supplied."
+        )
+
+    return {
+
+        "match":
+            score >= 60,
+
+        "score":
+            round(
+                score,
+                2,
+            ),
+
+        "reasons":
+            reasons,
+    }
 
 
 # ==========================================================
@@ -1181,96 +2083,405 @@ def rank_products(
     required_voltage_v=None,
 ):
     """
-    Rank products by closeness to engineering requirements.
+    Rank products according to engineering requirements.
     """
 
-    if not isinstance(products, list):
+    if not isinstance(
+        products,
+        list,
+    ):
+
         return []
 
     ranked = []
 
     for product in products:
 
-        item = dict(
+        if not isinstance(
+            product,
+            dict,
+        ):
+
+            continue
+
+        evaluation = (
+            match_product_requirement(
+                product,
+                required_power_w=
+                    required_power_w,
+                required_energy_kwh=
+                    required_energy_kwh,
+                required_voltage_v=
+                    required_voltage_v,
+            )
+        )
+
+        record = dict(
             product
         )
 
-        score = 0.0
+        record[
+            "match_score"
+        ] = evaluation[
+            "score"
+        ]
 
-        if required_power_w is not None:
+        record[
+            "matches_requirement"
+        ] = evaluation[
+            "match"
+        ]
 
-            power = get_panel_power_w(
-                product
-            )
-
-            target = safe_float(
-                required_power_w
-            )
-
-            if target > 0:
-                score += abs(
-                    power - target
-                ) / target
-
-        if required_energy_kwh is not None:
-
-            energy = safe_float(
-                product.get(
-                    "energy_kwh",
-                    0
-                )
-            )
-
-            target = safe_float(
-                required_energy_kwh
-            )
-
-            if target > 0:
-                score += abs(
-                    energy - target
-                ) / target
-
-        if required_voltage_v is not None:
-
-            voltage = safe_float(
-                product.get(
-                    "voltage_v",
-                    0
-                )
-            )
-
-            target = safe_float(
-                required_voltage_v
-            )
-
-            if target > 0:
-                score += abs(
-                    voltage - target
-                ) / target
-
-        item["_match_score"] = score
+        record[
+            "match_reasons"
+        ] = evaluation[
+            "reasons"
+        ]
 
         ranked.append(
-            item
+            record
         )
 
     ranked.sort(
-        key=lambda item:
-        item.get(
-            "_match_score",
-            999999
-        )
+        key=lambda product:
+            product.get(
+                "match_score",
+                0,
+            ),
+        reverse=True,
     )
 
     return ranked
 
 
 # ==========================================================
-# ANALYZE PRODUCTS
+# PRODUCT COMPARISON
+# ==========================================================
+
+def compare_products(
+    products,
+):
+    """
+    Prepare products for side-by-side comparison.
+
+    This is a backend function and does not import
+    Streamlit.
+    """
+
+    if not isinstance(
+        products,
+        list,
+    ):
+
+        return []
+
+    comparison = []
+
+    for product in products:
+
+        if not isinstance(
+            product,
+            dict,
+        ):
+
+            continue
+
+        row = {
+
+            "id":
+                product.get(
+                    "id",
+                    "",
+                ),
+
+            "name":
+                product.get(
+                    "name",
+                    "N/A",
+                ),
+
+            "manufacturer":
+                product.get(
+                    "manufacturer",
+                    "N/A",
+                ),
+
+            "model":
+                product.get(
+                    "model",
+                    "N/A",
+                ),
+
+            "category":
+                product.get(
+                    "category",
+                    "N/A",
+                ),
+
+            "technology":
+                product.get(
+                    "technology",
+                    "N/A",
+                ),
+
+            "power_w":
+                product.get(
+                    "rated_power_w",
+                    0,
+                ),
+
+            "voltage_v":
+                product.get(
+                    "voltage_v",
+                    0,
+                ),
+
+            "current_a":
+                product.get(
+                    "current_a",
+                    0,
+                ),
+
+            "capacity_ah":
+                product.get(
+                    "capacity_ah",
+                    0,
+                ),
+
+            "energy_kwh":
+                product.get(
+                    "energy_kwh",
+                    0,
+                ),
+
+            "efficiency_percent":
+                product.get(
+                    "efficiency_percent",
+                    0,
+                ),
+
+            "warranty_years":
+                product.get(
+                    "warranty_years",
+                    0,
+                ),
+
+            "price":
+                product.get(
+                    "price",
+                    0,
+                ),
+
+            "currency":
+                product.get(
+                    "currency",
+                    "USD",
+                ),
+
+            "quantity":
+                product.get(
+                    "quantity",
+                    0,
+                ),
+        }
+
+        specifications = product.get(
+            "specifications",
+            {},
+        )
+
+        if isinstance(
+            specifications,
+            dict,
+        ):
+
+            for key, value in specifications.items():
+
+                if key not in row:
+
+                    row[key] = value
+
+        comparison.append(
+            row
+        )
+
+    return comparison
+
+
+# ==========================================================
+# PRODUCT COMPARISON BY IDs
+# ==========================================================
+
+def compare_product_ids(
+    product_ids,
+):
+    """
+    Retrieve products using IDs and compare them.
+    """
+
+    if not product_ids:
+
+        return []
+
+    products = get_products()
+
+    selected = []
+
+    wanted = {
+
+        str(product_id)
+
+        for product_id in product_ids
+    }
+
+    for product in products:
+
+        if str(
+            product.get(
+                "id"
+            )
+        ) in wanted:
+
+            selected.append(
+                product
+            )
+
+    return compare_products(
+        selected
+    )
+
+
+# ==========================================================
+# PRODUCT SUMMARY
+# ==========================================================
+
+def create_product_summary(
+    products,
+):
+    """
+    Create a summary of a product collection.
+    """
+
+    if not isinstance(
+        products,
+        list,
+    ):
+
+        products = []
+
+    categories = {}
+
+    technologies = {}
+
+    total_quantity = 0
+
+    total_value = 0.0
+
+    for product in products:
+
+        if not isinstance(
+            product,
+            dict,
+        ):
+
+            continue
+
+        category = (
+            _safe_text(
+                product.get(
+                    "category",
+                    "Other",
+                ),
+                "Other",
+            )
+            or "Other"
+        )
+
+        technology = (
+            _safe_text(
+                product.get(
+                    "technology",
+                    "",
+                )
+            )
+            or "Unspecified"
+        )
+
+        categories[
+            category
+        ] = (
+            categories.get(
+                category,
+                0,
+            )
+            + 1
+        )
+
+        technologies[
+            technology
+        ] = (
+            technologies.get(
+                technology,
+                0,
+            )
+            + 1
+        )
+
+        quantity = safe_int(
+            product.get(
+                "quantity",
+                1,
+            ),
+            1,
+        )
+
+        price = safe_float(
+            product.get(
+                "price",
+                0,
+            )
+        )
+
+        total_quantity += quantity
+
+        total_value += (
+            price
+            * quantity
+        )
+
+    return {
+
+        "total_products":
+            len(
+                products
+            ),
+
+        "total_quantity":
+            total_quantity,
+
+        "total_inventory_value":
+            round(
+                total_value,
+                2,
+            ),
+
+        "categories":
+            categories,
+
+        "technologies":
+            technologies,
+
+        "product_categories":
+            categories,
+    }
+
+
+# ==========================================================
+# PRODUCT ANALYSIS
 # ==========================================================
 
 def analyze_products(
-    products=None,
+    products,
     search_query="",
     category="",
     technology="",
@@ -1279,356 +2490,398 @@ def analyze_products(
     required_voltage_v=None,
 ):
     """
-    Complete product search, filtering and ranking operation.
+    Complete product analysis pipeline.
     """
 
-    if products is None:
-        products = get_products()
+    if not isinstance(
+        products,
+        list,
+    ):
 
-    working = list(
+        products = []
+
+    working_products = list(
         products
-        if isinstance(products, list)
-        else []
     )
 
     if search_query:
 
-        working = search_products(
-            working,
-            search_query
+        working_products = (
+            search_products(
+                working_products,
+                search_query,
+            )
         )
 
     if category:
 
-        working = filter_products_by_category(
-            working,
-            category
+        working_products = (
+            filter_products_by_category(
+                working_products,
+                category,
+            )
         )
 
     if technology:
 
-        working = filter_products_by_technology(
-            working,
-            technology
+        working_products = (
+            filter_products_by_technology(
+                working_products,
+                technology,
+            )
         )
 
     ranked = rank_products(
-        working,
+
+        working_products,
+
         required_power_w=
             required_power_w,
+
         required_energy_kwh=
             required_energy_kwh,
+
         required_voltage_v=
             required_voltage_v,
     )
 
     return {
-        "success": True,
-        "products_found": len(ranked),
-        "products": ranked,
-        "comparison": compare_products(
-            ranked
-        ),
+
+        "success":
+            True,
+
+        "products_found":
+            len(
+                ranked
+            ),
+
+        "products":
+            ranked,
+
+        "comparison":
+            compare_products(
+                ranked
+            ),
+
+        "summary":
+            create_product_summary(
+                working_products
+            ),
     }
-
-
-# ==========================================================
-# PRODUCT COMPARISON
-# ==========================================================
-
-def compare_products(
-    products=None
-):
-    """
-    Produce a normalized comparison dataset.
-    """
-
-    if products is None:
-        products = get_products()
-
-    if not isinstance(products, list):
-        products = []
-
-    rows = []
-
-    for product in products:
-
-        if not isinstance(product, dict):
-            continue
-
-        specs = product.get(
-            "specifications",
-            {}
-        )
-
-        if not isinstance(specs, dict):
-            specs = {}
-
-        row = {
-            "id":
-                product.get("id"),
-
-            "name":
-                product.get("name"),
-
-            "category":
-                product.get("category"),
-
-            "manufacturer":
-                product.get("manufacturer"),
-
-            "model":
-                product.get("model"),
-
-            "technology":
-                product.get("technology"),
-
-            "rated_power_w":
-                get_panel_power_w(
-                    product
-                ),
-
-            "voltage_v":
-                product.get(
-                    "voltage_v",
-                    0
-                ),
-
-            "capacity_ah":
-                get_battery_capacity_ah(
-                    product
-                ),
-
-            "energy_kwh":
-                product.get(
-                    "energy_kwh",
-                    0
-                ),
-
-            "efficiency_percent":
-                product.get(
-                    "efficiency_percent",
-                    0
-                ),
-
-            "price":
-                product.get(
-                    "price",
-                    0
-                ),
-
-            "currency":
-                product.get(
-                    "currency",
-                    "USD"
-                ),
-        }
-
-        row.update(
-            specs
-        )
-
-        rows.append(
-            row
-        )
-
-    return rows
 
 
 # ==========================================================
 # DATABASE SUMMARY
 # ==========================================================
 
-def get_product_summary():
+def get_library_summary():
     """
-    Return summary information from the central database.
+    Return central library summary.
     """
 
-    if not _storage_ready():
-        return {
-            "total_products": 0,
-            "total_quantity": 0,
-            "product_categories": {},
-        }
+    if library_store is not None:
 
-    try:
+        function = getattr(
+            library_store,
+            "get_library_summary",
+            None,
+        )
 
-        initialize_product_database()
+        if callable(function):
 
-        summary = get_product_library_summary()
+            try:
 
-        if isinstance(summary, dict):
-            return summary
+                return function()
 
-    except Exception:
-        pass
+            except Exception:
+
+                pass
 
     products = get_products()
 
-    categories = {}
+    summary = create_product_summary(
+        products
+    )
 
-    quantity = 0
+    summary[
+        "total_services"
+    ] = 0
 
-    for product in products:
+    summary[
+        "database_file"
+    ] = (
+        str(DB_PATH)
+        if DB_PATH is not None
+        else ""
+    )
 
-        category = product.get(
-            "category",
-            "Other"
+    return summary
+
+
+def get_product_library_summary():
+    """
+    Product-only summary.
+    """
+
+    if library_store is not None:
+
+        function = getattr(
+            library_store,
+            "get_product_library_summary",
+            None,
         )
 
-        categories[category] = (
-            categories.get(
-                category,
-                0
-            )
-            + 1
-        )
+        if callable(function):
 
-        quantity += safe_float(
-            product.get(
-                "quantity",
-                1
-            ),
-            1
-        )
+            try:
 
-    return {
-        "total_products": len(products),
-        "total_quantity": quantity,
-        "product_categories": categories,
-    }
+                return function()
 
+            except Exception:
 
-# ==========================================================
-# BACKUP
-# ==========================================================
+                pass
 
-def backup_product_database():
-    """
-    Create a backup using library_store.py.
-    """
+    products = get_products()
 
-    if not callable(
-        backup_library
-    ):
-        return {
-            "success": False,
-            "message": "Backup function unavailable.",
-        }
-
-    try:
-
-        result = backup_library()
-
-        if isinstance(result, dict):
-            return result
-
-        return {
-            "success": True,
-            "backup": result,
-        }
-
-    except Exception as exc:
-
-        return {
-            "success": False,
-            "message": str(exc),
-        }
-
-
-# ==========================================================
-# MODULE STATUS
-# ==========================================================
-
-def get_engine_status():
-    """
-    Diagnostic information for testing.
-    """
-
-    return {
-        "storage_available":
-            _storage_import_error_is_none(),
-
-        "database_initialized":
-            initialize_product_database(),
-
-        "products":
-            len(get_products()),
-
-        "categories":
-            PRODUCT_CATEGORIES,
-    }
-
-
-def _storage_import_error_is_none():
-    return (
-        _STORAGE_IMPORT_ERROR is None
+    return create_product_summary(
+        products
     )
 
 
 # ==========================================================
-# BACKWARD COMPATIBILITY
+# DATABASE BACKUP
 # ==========================================================
 
-def remove_product(
+def backup_library():
+    """
+    Create a database backup.
+    """
+
+    if library_store is None:
+
+        return None
+
+    function = getattr(
+        library_store,
+        "backup_library",
+        None,
+    )
+
+    if callable(function):
+
+        return function()
+
+    return None
+
+
+def backup_database():
+    """
+    Backward-compatible alias.
+    """
+
+    return backup_library()
+
+
+# ==========================================================
+# CLEAR PRODUCT LIBRARY
+# ==========================================================
+
+def clear_product_library():
+    """
+    Delete all products from the central library.
+    """
+
+    if library_store is None:
+
+        return False
+
+    function = getattr(
+        library_store,
+        "clear_product_library",
+        None,
+    )
+
+    if callable(function):
+
+        return function()
+
+    return False
+
+
+# ==========================================================
+# SAVE PRODUCT LIBRARY
+# ==========================================================
+
+def save_product_library(
     products,
-    index,
 ):
     """
-    Legacy in-memory helper retained so older tests do not
-    immediately fail.
+    Replace the central product library.
+    """
 
-    This does NOT delete from SQLite.
-    Use delete_product(product_id) for database deletion.
+    if library_store is None:
+
+        return False
+
+    function = getattr(
+        library_store,
+        "save_product_library",
+        None,
+    )
+
+    if not callable(function):
+
+        return False
+
+    return function(
+        products or []
+    )
+
+
+# ==========================================================
+# PRODUCT DETAILS DATA
+# ==========================================================
+
+def product_details_data(
+    product_id,
+):
+    """
+    Return a single complete product record.
+    """
+
+    return get_product(
+        product_id
+    )
+
+
+# ==========================================================
+# PRODUCT COST
+# ==========================================================
+
+def calculate_product_inventory_value(
+    product,
+):
+    """
+    Calculate inventory value:
+
+        price × quantity
     """
 
     if not isinstance(
-        products,
-        list
+        product,
+        dict,
     ):
 
-        return {
-            "success": False,
-            "message": "Product list is invalid.",
-            "products": [],
-        }
+        return 0.0
 
-    try:
-        index = int(index)
-
-    except (
-        TypeError,
-        ValueError
-    ):
-
-        return {
-            "success": False,
-            "message": "Invalid product index.",
-            "products": products,
-        }
-
-    if index < 0 or index >= len(products):
-
-        return {
-            "success": False,
-            "message": "Invalid product index.",
-            "products": products,
-        }
-
-    removed = products.pop(
-        index
+    price = safe_float(
+        product.get(
+            "price",
+            0,
+        )
     )
 
-    return {
-        "success": True,
-        "message": "Product removed successfully.",
-        "removed": removed,
-        "products": products,
-    }
+    quantity = safe_int(
+        product.get(
+            "quantity",
+            1,
+        ),
+        1,
+    )
+
+    return round(
+        price * quantity,
+        2,
+    )
 
 
 # ==========================================================
-# INITIALIZE ON IMPORT
+# PRODUCT NAME LIST
 # ==========================================================
 
-initialize_product_database()
+def get_product_names():
+    """
+    Return product names from the central library.
+    """
+
+    return [
+
+        product.get(
+            "name",
+            "",
+        )
+
+        for product in get_products()
+
+        if product.get(
+            "name"
+        )
+    ]
+
+
+# ==========================================================
+# PRODUCT CATEGORIES
+# ==========================================================
+
+def get_product_categories():
+    """
+    Return categories actually present in the library.
+    """
+
+    categories = []
+
+    for product in get_products():
+
+        category = product.get(
+            "category"
+        )
+
+        if category and category not in categories:
+
+            categories.append(
+                category
+            )
+
+    return sorted(
+        categories
+    )
+
+
+# ==========================================================
+# PRODUCT TECHNOLOGIES
+# ==========================================================
+
+def get_product_technologies():
+    """
+    Return technologies actually present in the library.
+    """
+
+    technologies = []
+
+    for product in get_products():
+
+        technology = product.get(
+            "technology"
+        )
+
+        if (
+            technology
+            and technology not in technologies
+        ):
+
+            technologies.append(
+                technology
+            )
+
+    return sorted(
+        technologies
+    )
+
+
+# ==========================================================
+# MODULE INITIALIZATION
+# ==========================================================
+
+# Initialize the central database when this module is
+# imported. No product records are inserted.
+initialize_database()
