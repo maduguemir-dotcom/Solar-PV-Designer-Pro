@@ -801,44 +801,46 @@ def analyze_appliance_load(
 
     analysis = {
 
-        # --------------------------------------------------
-        # DAILY ENERGY
-        # --------------------------------------------------
+    # --------------------------------------------------
+    # DAILY ENERGY
+    # --------------------------------------------------
 
-        "total_daily_kwh":
-            total_energy,
+    "total_daily_kwh":
+        total_energy,
 
-        "total_daily_energy_kwh":
-            total_energy,
+    "total_daily_wh":
+        round(total_energy * 1000, 2),
 
-        "total_energy_kwh":
-            total_energy,
+    "total_daily_energy_kwh":
+        total_energy,
 
-        "daily_energy_kwh":
-            total_energy,
+    "total_energy_kwh":
+        total_energy,
 
-        # --------------------------------------------------
-        # LOAD
-        # --------------------------------------------------
+    "daily_energy_kwh":
+        total_energy,
 
-        "total_load_w":
-            total_load,
+    # --------------------------------------------------
+    # LOAD
+    # --------------------------------------------------
 
-        "total_load_kw":
-            round(
-                total_load / 1000.0,
-                4,
-            ),
+    "total_load_w":
+        total_load,
 
-        "connected_load_w":
-            total_load,
+    "total_load_kw":
+        round(
+            total_load / 1000.0,
+            4,
+        ),
 
-        "connected_load_kw":
-            round(
-                total_load / 1000.0,
-                4,
-            ),
+    "connected_load_w":
+        total_load,
 
+    "connected_load_kw":
+        round(
+            total_load / 1000.0,
+            4,
+        ),
         # --------------------------------------------------
         # APPLIANCE DETAILS
         # --------------------------------------------------
