@@ -1,477 +1,708 @@
 # ==========================================================
 # SOLAR PV DESIGNER PRO AFRICA™
-# ==========================================================
+# APPLIANCE ENERGY PLANNER
 #
-# Appliance Energy Calculator
-# Version: 2.4.0
-#
-# Developed by:
-# Engr. Prof. Ibrahim Sani Madugu
+# Version: 1.0
 #
 # Purpose:
-# Calculate daily and monthly electrical energy demand
-# from household, institutional and commercial appliances.
-#
+# - Maintain a standard appliance library
+# - Calculate daily appliance energy consumption
+# - Calculate appliance load
+# - Calculate category summaries
+# - Support the Streamlit Appliance Energy Planner UI
+# - Provide compatibility functions for main.py
 # ==========================================================
+
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any, Dict, List, Optional
 
 
 # ==========================================================
-# SECTION 1 - STANDARD APPLIANCE LIBRARY
+# DEFAULT APPLIANCE DATABASE
 # ==========================================================
 
-DEFAULT_APPLIANCES = [
+DEFAULT_APPLIANCES: List[Dict[str, Any]] = [
+
+    # ------------------------------------------------------
+    # LIGHTING
+    # ------------------------------------------------------
 
     {
-        "name": "LED Light",
+        "name": "LED Bulb",
         "category": "Lighting",
-        "wattage": 10
+        "power_w": 10,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Typical LED household lighting.",
     },
 
     {
-        "name": "CFL Light",
+        "name": "LED Bulb 15W",
         "category": "Lighting",
-        "wattage": 20
+        "power_w": 15,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Higher-output LED bulb.",
     },
+
+    {
+        "name": "Fluorescent Lamp",
+        "category": "Lighting",
+        "power_w": 40,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Typical fluorescent lamp.",
+    },
+
+    # ------------------------------------------------------
+    # ENTERTAINMENT
+    # ------------------------------------------------------
+
+    {
+        "name": "LED Television",
+        "category": "Entertainment",
+        "power_w": 100,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Typical LED television.",
+    },
+
+    {
+        "name": "Decoder / Satellite Receiver",
+        "category": "Entertainment",
+        "power_w": 25,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Satellite or digital TV decoder.",
+    },
+
+    {
+        "name": "Radio",
+        "category": "Entertainment",
+        "power_w": 15,
+        "quantity": 1,
+        "hours_per_day": 4,
+        "description": "Small household radio.",
+    },
+
+    {
+        "name": "Laptop",
+        "category": "Entertainment",
+        "power_w": 60,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Typical laptop computer.",
+    },
+
+    {
+        "name": "Phone Charger",
+        "category": "Entertainment",
+        "power_w": 10,
+        "quantity": 1,
+        "hours_per_day": 3,
+        "description": "Mobile phone charging.",
+    },
+
+    # ------------------------------------------------------
+    # COOLING
+    # ------------------------------------------------------
 
     {
         "name": "Ceiling Fan",
         "category": "Cooling",
-        "wattage": 75
+        "power_w": 80,
+        "quantity": 1,
+        "hours_per_day": 8,
+        "description": "Typical ceiling fan.",
     },
 
     {
         "name": "Standing Fan",
         "category": "Cooling",
-        "wattage": 60
-    },
-
-    {
-        "name": "Television",
-        "category": "Entertainment",
-        "wattage": 100
-    },
-
-    {
-        "name": "Decoder / Set-top Box",
-        "category": "Entertainment",
-        "wattage": 25
-    },
-
-    {
-        "name": "Refrigerator",
-        "category": "Kitchen",
-        "wattage": 150
-    },
-
-    {
-        "name": "Freezer",
-        "category": "Kitchen",
-        "wattage": 200
-    },
-
-    {
-        "name": "Electric Iron",
-        "category": "Household",
-        "wattage": 1000
-    },
-
-    {
-        "name": "Electric Kettle",
-        "category": "Kitchen",
-        "wattage": 1500
-    },
-
-    {
-        "name": "Microwave Oven",
-        "category": "Kitchen",
-        "wattage": 1200
-    },
-
-    {
-        "name": "Electric Cooker",
-        "category": "Kitchen",
-        "wattage": 2000
+        "power_w": 60,
+        "quantity": 1,
+        "hours_per_day": 8,
+        "description": "Typical standing fan.",
     },
 
     {
         "name": "Air Conditioner",
         "category": "Cooling",
-        "wattage": 1500
+        "power_w": 1200,
+        "quantity": 1,
+        "hours_per_day": 5,
+        "description": "Typical residential air conditioner.",
+    },
+
+    # ------------------------------------------------------
+    # KITCHEN
+    # ------------------------------------------------------
+
+    {
+        "name": "Refrigerator",
+        "category": "Kitchen",
+        "power_w": 150,
+        "quantity": 1,
+        "hours_per_day": 8,
+        "description": "Average running power estimate.",
     },
 
     {
-        "name": "Water Pump",
-        "category": "Water",
-        "wattage": 750
+        "name": "Electric Kettle",
+        "category": "Kitchen",
+        "power_w": 1500,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical electric kettle.",
     },
 
     {
-        "name": "Laptop",
-        "category": "ICT",
-        "wattage": 65
+        "name": "Microwave Oven",
+        "category": "Kitchen",
+        "power_w": 1200,
+        "quantity": 1,
+        "hours_per_day": 0.5,
+        "description": "Typical microwave oven.",
     },
 
     {
-        "name": "Desktop Computer",
-        "category": "ICT",
-        "wattage": 250
+        "name": "Electric Cooker",
+        "category": "Kitchen",
+        "power_w": 2000,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical electric cooker.",
     },
 
     {
-        "name": "Wi-Fi Router",
-        "category": "ICT",
-        "wattage": 15
+        "name": "Blender",
+        "category": "Kitchen",
+        "power_w": 500,
+        "quantity": 1,
+        "hours_per_day": 0.5,
+        "description": "Typical household blender.",
     },
 
-    {
-        "name": "Printer",
-        "category": "ICT",
-        "wattage": 100
-    },
-
-    {
-        "name": "Phone Charger",
-        "category": "ICT",
-        "wattage": 10
-    },
+    # ------------------------------------------------------
+    # LAUNDRY
+    # ------------------------------------------------------
 
     {
         "name": "Washing Machine",
         "category": "Laundry",
-        "wattage": 500
+        "power_w": 500,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical washing machine.",
     },
 
     {
-        "name": "Hair Dryer",
-        "category": "Personal Care",
-        "wattage": 1200
+        "name": "Electric Iron",
+        "category": "Laundry",
+        "power_w": 1000,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical household iron.",
+    },
+
+    # ------------------------------------------------------
+    # OFFICE
+    # ------------------------------------------------------
+
+    {
+        "name": "Desktop Computer",
+        "category": "Office",
+        "power_w": 200,
+        "quantity": 1,
+        "hours_per_day": 6,
+        "description": "Desktop computer including monitor.",
     },
 
     {
-        "name": "Other / Custom Appliance",
-        "category": "Custom",
-        "wattage": 100
-    }
+        "name": "Printer",
+        "category": "Office",
+        "power_w": 50,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical office printer.",
+    },
+
+    {
+        "name": "Wi-Fi Router",
+        "category": "Office",
+        "power_w": 15,
+        "quantity": 1,
+        "hours_per_day": 24,
+        "description": "Typical home or office router.",
+    },
+
+    # ------------------------------------------------------
+    # WATER / OTHER
+    # ------------------------------------------------------
+
+    {
+        "name": "Water Pump",
+        "category": "Water",
+        "power_w": 750,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical small water pump.",
+    },
+
+    {
+        "name": "Electric Water Heater",
+        "category": "Other",
+        "power_w": 2000,
+        "quantity": 1,
+        "hours_per_day": 1,
+        "description": "Typical domestic water heater.",
+    },
 
 ]
 
 
 # ==========================================================
-# SECTION 2 - SAFE NUMERIC CONVERSION
+# SAFE CONVERSION FUNCTIONS
 # ==========================================================
 
-def safe_float(value, default=0.0):
+def safe_float(
+    value: Any,
+    default: float = 0.0,
+) -> float:
 
     try:
 
         if value is None:
             return default
 
-        number = float(value)
+        return float(value)
 
-        if number < 0:
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return default
+
+
+def safe_int(
+    value: Any,
+    default: int = 0,
+) -> int:
+
+    try:
+
+        if value is None:
             return default
 
-        return number
+        return int(float(value))
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError,
+    ):
 
         return default
 
 
 # ==========================================================
-# SECTION 3 - CALCULATE APPLIANCE ENERGY
-# ==========================================================
-
-def calculate_appliance_energy(
-    wattage,
-    hours_per_day,
-    quantity=1
-):
-    """
-    Calculate energy consumed by an appliance.
-
-    Formula:
-
-        Daily Wh =
-            Wattage × Hours × Quantity
-
-        Daily kWh =
-            Daily Wh / 1000
-
-        Monthly kWh =
-            Daily kWh × 30
-    """
-
-    wattage = safe_float(wattage)
-    hours_per_day = safe_float(hours_per_day)
-    quantity = safe_float(quantity, 1)
-
-    daily_wh = (
-        wattage
-        *
-        hours_per_day
-        *
-        quantity
-    )
-
-    daily_kwh = (
-        daily_wh / 1000
-    )
-
-    monthly_kwh = (
-        daily_kwh * 30
-    )
-
-    return {
-
-        "daily_wh": daily_wh,
-
-        "daily_kwh": daily_kwh,
-
-        "monthly_kwh": monthly_kwh
-
-    }
-
-
-# ==========================================================
-# SECTION 4 - CREATE APPLIANCE RECORD
+# CREATE APPLIANCE RECORD
 # ==========================================================
 
 def create_appliance_record(
-    name,
-    category,
-    wattage,
-    hours_per_day,
-    quantity=1
-):
+    name: str = "",
+    category: str = "Other",
+    power_w: float = 0,
+    quantity: int = 1,
+    hours_per_day: float = 0,
+    description: str = "",
+    **kwargs: Any,
+) -> Dict[str, Any]:
 
-    energy = calculate_appliance_energy(
+    record = {
 
-        wattage=wattage,
+        "name":
+            str(name),
 
-        hours_per_day=hours_per_day,
+        "category":
+            str(category),
 
-        quantity=quantity
+        "power_w":
+            safe_float(power_w),
 
-    )
+        "quantity":
+            max(
+                safe_int(quantity, 1),
+                1
+            ),
 
-    return {
+        "hours_per_day":
+            max(
+                safe_float(hours_per_day),
+                0
+            ),
 
-        "appliance": str(name),
+        "description":
+            str(description),
 
-        "category": str(category),
+    }
 
-        "quantity": safe_float(
-            quantity,
+    # Preserve optional fields if supplied
+    record.update(kwargs)
+
+    return record
+
+
+# ==========================================================
+# NORMALIZE APPLIANCE
+# ==========================================================
+
+def normalize_appliance(
+    appliance: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+
+    if appliance is None:
+        appliance = {}
+
+    appliance = dict(appliance)
+
+    return create_appliance_record(
+
+        name=appliance.get(
+            "name",
+            appliance.get(
+                "appliance",
+                ""
+            )
+        ),
+
+        category=appliance.get(
+            "category",
+            "Other"
+        ),
+
+        power_w=appliance.get(
+            "power_w",
+            appliance.get(
+                "power",
+                0
+            )
+        ),
+
+        quantity=appliance.get(
+            "quantity",
             1
         ),
 
-        "wattage_w": safe_float(
-            wattage
+        hours_per_day=appliance.get(
+            "hours_per_day",
+            appliance.get(
+                "hours",
+                0
+            )
         ),
 
-        "hours_per_day": safe_float(
-            hours_per_day
+        description=appliance.get(
+            "description",
+            ""
         ),
-
-        "daily_wh": energy[
-            "daily_wh"
-        ],
-
-        "daily_kwh": energy[
-            "daily_kwh"
-        ],
-
-        "monthly_kwh": energy[
-            "monthly_kwh"
-        ]
-
-    }
+    )
 
 
 # ==========================================================
-# SECTION 5 - CALCULATE TOTAL ENERGY DEMAND
+# GET DEFAULT APPLIANCE
 # ==========================================================
 
-def calculate_total_energy_demand(
-    appliances
-):
+def get_default_appliance(
+    name: str,
+) -> Optional[Dict[str, Any]]:
 
-    if not appliances:
+    target = str(
+        name
+    ).strip().lower()
 
-        return {
+    for appliance in DEFAULT_APPLIANCES:
 
-            "total_daily_wh": 0.0,
+        if appliance[
+            "name"
+        ].strip().lower() == target:
 
-            "total_daily_kwh": 0.0,
-
-            "total_monthly_kwh": 0.0
-
-        }
-
-    total_daily_wh = 0.0
-
-    total_monthly_kwh = 0.0
-
-    for appliance in appliances:
-
-        total_daily_wh += safe_float(
-            appliance.get(
-                "daily_wh"
+            return deepcopy(
+                appliance
             )
-        )
 
-        total_monthly_kwh += safe_float(
-            appliance.get(
-                "monthly_kwh"
-            )
-        )
-
-    return {
-
-        "total_daily_wh":
-            total_daily_wh,
-
-        "total_daily_kwh":
-            total_daily_wh / 1000,
-
-        "total_monthly_kwh":
-            total_monthly_kwh
-
-    }
+    return None
 
 
 # ==========================================================
-# SECTION 6 - CALCULATE APPLIANCE CONTRIBUTIONS
+# GET APPLIANCE NAMES
+# ==========================================================
+
+def get_appliance_names() -> List[str]:
+
+    return [
+        appliance["name"]
+        for appliance in DEFAULT_APPLIANCES
+    ]
+
+
+# ==========================================================
+# CALCULATE APPLIANCE ENERGY
+# ==========================================================
+
+def calculate_appliance_energy(
+    appliance: Dict[str, Any],
+) -> float:
+
+    appliance = normalize_appliance(
+        appliance
+    )
+
+    power_w = safe_float(
+        appliance.get(
+            "power_w",
+            0
+        )
+    )
+
+    quantity = safe_int(
+        appliance.get(
+            "quantity",
+            1
+        ),
+        1
+    )
+
+    hours = safe_float(
+        appliance.get(
+            "hours_per_day",
+            0
+        )
+    )
+
+    energy_kwh = (
+        power_w
+        * quantity
+        * hours
+        / 1000.0
+    )
+
+    return round(
+        energy_kwh,
+        4
+    )
+
+
+# ==========================================================
+# CALCULATE APPLIANCE CONTRIBUTIONS
 # ==========================================================
 
 def calculate_appliance_contributions(
-    appliances
-):
+    appliances: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
 
-    totals = calculate_total_energy_demand(
-        appliances
-    )
-
-    total_daily_wh = totals[
-        "total_daily_wh"
-    ]
-
-    results = []
+    contributions = []
 
     for appliance in appliances:
 
-        daily_wh = safe_float(
-            appliance.get(
-                "daily_wh"
-            )
-        )
-
-        if total_daily_wh > 0:
-
-            contribution = (
-                daily_wh
-                /
-                total_daily_wh
-                *
-                100
-            )
-
-        else:
-
-            contribution = 0.0
-
-        item = dict(
+        normalized = normalize_appliance(
             appliance
         )
 
-        item[
-            "contribution_percent"
-        ] = contribution
+        energy = calculate_appliance_energy(
+            normalized
+        )
 
-        results.append(
+        item = dict(
+            normalized
+        )
+
+        item[
+            "daily_energy_kwh"
+        ] = energy
+
+        item[
+            "energy_kwh"
+        ] = energy
+
+        item[
+            "load_w"
+        ] = round(
+            safe_float(
+                normalized.get(
+                    "power_w",
+                    0
+                )
+            )
+            * safe_int(
+                normalized.get(
+                    "quantity",
+                    1
+                ),
+                1
+            ),
+            2
+        )
+
+        contributions.append(
             item
         )
 
-    return results
+    return contributions
 
 
 # ==========================================================
-# SECTION 7 - SORT APPLIANCES BY ENERGY
+# TOTAL ENERGY DEMAND
 # ==========================================================
 
-def sort_appliances_by_energy(
-    appliances,
-    descending=True
-):
+def calculate_total_energy_demand(
+    appliances: List[Dict[str, Any]],
+) -> float:
 
-    return sorted(
+    contributions = (
+        calculate_appliance_contributions(
+            appliances
+        )
+    )
 
-        appliances,
+    total = sum(
+        safe_float(
+            item.get(
+                "daily_energy_kwh",
+                0
+            )
+        )
+        for item in contributions
+    )
 
-        key=lambda item:
-            safe_float(
-                item.get(
-                    "daily_wh"
-                )
-            ),
-
-        reverse=descending
-
+    return round(
+        total,
+        4
     )
 
 
 # ==========================================================
-# SECTION 8 - CATEGORY SUMMARY
+# DAILY DEMAND
 # ==========================================================
 
-def calculate_category_summary(
-    appliances
-):
+def calculate_daily_demand(
+    appliances: List[Dict[str, Any]],
+) -> float:
 
-    category_totals = {}
-
-    for appliance in appliances:
-
-        category = appliance.get(
-            "category",
-            "Other"
-        )
-
-        daily_kwh = safe_float(
-            appliance.get(
-                "daily_kwh"
-            )
-        )
-
-        if category not in category_totals:
-
-            category_totals[
-                category
-            ] = 0.0
-
-        category_totals[
-            category
-        ] += daily_kwh
-
-    return category_totals
-
-
-# ==========================================================
-# SECTION 9 - COMPLETE LOAD ANALYSIS
-# ==========================================================
-
-def analyze_appliance_load(
-    appliances
-):
-
-    totals = calculate_total_energy_demand(
+    return calculate_total_energy_demand(
         appliances
     )
 
-    contribution_data = (
+
+# ==========================================================
+# TOTAL CONNECTED LOAD
+# ==========================================================
+
+def calculate_total_load(
+    appliances: List[Dict[str, Any]],
+) -> float:
+
+    total = 0.0
+
+    for appliance in appliances:
+
+        normalized = normalize_appliance(
+            appliance
+        )
+
+        total += (
+            safe_float(
+                normalized.get(
+                    "power_w",
+                    0
+                )
+            )
+            *
+            safe_int(
+                normalized.get(
+                    "quantity",
+                    1
+                ),
+                1
+            )
+        )
+
+    return round(
+        total,
+        2
+    )
+
+
+# ==========================================================
+# CATEGORY SUMMARY
+# ==========================================================
+
+def calculate_category_summary(
+    appliances: List[Dict[str, Any]],
+) -> Dict[str, float]:
+
+    summary: Dict[str, float] = {}
+
+    contributions = (
         calculate_appliance_contributions(
+            appliances
+        )
+    )
+
+    for appliance in contributions:
+
+        category = (
+            appliance.get(
+                "category"
+            )
+            or "Other"
+        )
+
+        energy = safe_float(
+            appliance.get(
+                "daily_energy_kwh",
+                0
+            )
+        )
+
+        summary[
+            category
+        ] = round(
+            summary.get(
+                category,
+                0
+            )
+            + energy,
+            4
+        )
+
+    return summary
+
+
+# ==========================================================
+# ANALYZE APPLIANCE LOAD
+# ==========================================================
+
+def analyze_appliance_load(
+    appliances: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+
+    contributions = (
+        calculate_appliance_contributions(
+            appliances
+        )
+    )
+
+    total_energy = (
+        calculate_total_energy_demand(
+            appliances
+        )
+    )
+
+    total_load = (
+        calculate_total_load(
             appliances
         )
     )
@@ -482,87 +713,129 @@ def analyze_appliance_load(
         )
     )
 
-    sorted_appliances = (
-        sort_appliances_by_energy(
-            contribution_data
+    if contributions:
+
+        highest_energy = max(
+            contributions,
+            key=lambda item:
+            safe_float(
+                item.get(
+                    "daily_energy_kwh",
+                    0
+                )
+            )
         )
-    )
+
+    else:
+
+        highest_energy = None
 
     return {
 
-        "appliances":
-            contribution_data,
+        "total_daily_energy_kwh":
+            total_energy,
 
-        "total_daily_wh":
-            totals[
-                "total_daily_wh"
-            ],
+        "total_load_w":
+            total_load,
 
-        "total_daily_kwh":
-            totals[
-                "total_daily_kwh"
-            ],
-
-        "total_monthly_kwh":
-            totals[
-                "total_monthly_kwh"
-            ],
+        "total_load_kw":
+            round(
+                total_load / 1000.0,
+                4
+            ),
 
         "category_summary":
             category_summary,
 
-        "highest_consuming_appliances":
-            sorted_appliances
+        "appliance_contributions":
+            contributions,
+
+        "highest_energy_appliance":
+            highest_energy,
 
     }
 
 
 # ==========================================================
-# SECTION 10 - VALIDATE APPLIANCE
+# SORT APPLIANCES BY ENERGY
+# ==========================================================
+
+def sort_appliances_by_energy(
+    appliances: List[Dict[str, Any]],
+    descending: bool = True,
+) -> List[Dict[str, Any]]:
+
+    contributions = (
+        calculate_appliance_contributions(
+            appliances
+        )
+    )
+
+    return sorted(
+        contributions,
+        key=lambda item:
+        safe_float(
+            item.get(
+                "daily_energy_kwh",
+                0
+            )
+        ),
+        reverse=descending
+    )
+
+
+# ==========================================================
+# VALIDATE APPLIANCE
 # ==========================================================
 
 def validate_appliance(
-    wattage,
-    hours_per_day,
-    quantity
-):
+    appliance: Dict[str, Any],
+) -> Dict[str, Any]:
+
+    normalized = normalize_appliance(
+        appliance
+    )
 
     errors = []
 
-    wattage = safe_float(
-        wattage
-    )
-
-    hours_per_day = safe_float(
-        hours_per_day
-    )
-
-    quantity = safe_float(
-        quantity
-    )
-
-    if wattage <= 0:
+    if not normalized[
+        "name"
+    ].strip():
 
         errors.append(
-            "Wattage must be greater than zero."
+            "Appliance name is required."
         )
 
-    if hours_per_day <= 0:
+    if normalized[
+        "power_w"
+    ] < 0:
 
         errors.append(
-            "Hours per day must be greater than zero."
+            "Power cannot be negative."
         )
 
-    if hours_per_day > 24:
+    if normalized[
+        "quantity"
+    ] < 1:
+
+        errors.append(
+            "Quantity must be at least 1."
+        )
+
+    if normalized[
+        "hours_per_day"
+    ] < 0:
+
+        errors.append(
+            "Hours per day cannot be negative."
+        )
+
+    if normalized[
+        "hours_per_day"
+    ] > 24:
 
         errors.append(
             "Hours per day cannot exceed 24."
-        )
-
-    if quantity <= 0:
-
-        errors.append(
-            "Quantity must be greater than zero."
         )
 
     return {
@@ -571,45 +844,533 @@ def validate_appliance(
             len(errors) == 0,
 
         "errors":
-            errors
+            errors,
+
+        "appliance":
+            normalized,
 
     }
 
 
 # ==========================================================
-# SECTION 11 - DEFAULT APPLIANCE LOOKUP
+# STREAMLIT UI
 # ==========================================================
 
-def get_default_appliance(
-    appliance_name
-):
+def display_appliance_calculator(
+    st,
+) -> Optional[Dict[str, Any]]:
+    """
+    Main Streamlit Appliance Energy Planner UI.
 
-    for appliance in DEFAULT_APPLIANCES:
+    This function is intentionally compatible with:
 
-        if (
-            appliance["name"]
-            ==
+        display_appliance_calculator(st)
+
+    used by main.py.
+    """
+
+    st.subheader(
+        "🔌 Appliance Energy Planner"
+    )
+
+    st.caption(
+        "Estimate household or facility energy consumption "
+        "from appliance power ratings, quantities and daily "
+        "operating hours."
+    )
+
+    # ------------------------------------------------------
+    # Session state
+    # ------------------------------------------------------
+
+    if (
+        "appliance_planner_items"
+        not in st.session_state
+    ):
+
+        st.session_state[
+            "appliance_planner_items"
+        ] = []
+
+    # ------------------------------------------------------
+    # ADD APPLIANCE
+    # ------------------------------------------------------
+
+    st.markdown(
+        "### ➕ Add Appliance"
+    )
+
+    col1, col2 = st.columns(
+        [2, 1]
+    )
+
+    with col1:
+
+        appliance_name = st.selectbox(
+            "Appliance",
+            get_appliance_names(),
+            key="appliance_name_select",
+        )
+
+    with col2:
+
+        category = st.selectbox(
+            "Category",
+            sorted(
+                list(
+                    {
+                        item["category"]
+                        for item
+                        in DEFAULT_APPLIANCES
+                    }
+                )
+            ),
+            key="appliance_category_select",
+        )
+
+    default = (
+        get_default_appliance(
             appliance_name
-        ):
+        )
+    )
 
-            return dict(
-                appliance
+    if default is None:
+
+        default = {
+            "power_w": 0,
+            "quantity": 1,
+            "hours_per_day": 1,
+        }
+
+    col1, col2, col3 = st.columns(
+        3
+    )
+
+    with col1:
+
+        power_w = st.number_input(
+            "Power rating (W)",
+            min_value=0.0,
+            value=float(
+                default.get(
+                    "power_w",
+                    0
+                )
+            ),
+            step=1.0,
+            key="appliance_power_input",
+        )
+
+    with col2:
+
+        quantity = st.number_input(
+            "Quantity",
+            min_value=1,
+            value=int(
+                default.get(
+                    "quantity",
+                    1
+                )
+            ),
+            step=1,
+            key="appliance_quantity_input",
+        )
+
+    with col3:
+
+        hours_per_day = st.number_input(
+            "Hours per day",
+            min_value=0.0,
+            max_value=24.0,
+            value=float(
+                default.get(
+                    "hours_per_day",
+                    1
+                )
+            ),
+            step=0.5,
+            key="appliance_hours_input",
+        )
+
+    description = st.text_input(
+        "Description / notes",
+        value=str(
+            default.get(
+                "description",
+                ""
+            )
+        ),
+        key="appliance_description_input",
+    )
+
+    # ------------------------------------------------------
+    # LIVE PREVIEW
+    # ------------------------------------------------------
+
+    preview = create_appliance_record(
+
+        name=appliance_name,
+
+        category=category,
+
+        power_w=power_w,
+
+        quantity=quantity,
+
+        hours_per_day=hours_per_day,
+
+        description=description,
+    )
+
+    preview_energy = (
+        calculate_appliance_energy(
+            preview
+        )
+    )
+
+    st.info(
+        f"Estimated daily consumption: "
+        f"**{preview_energy:.3f} kWh/day**"
+    )
+
+    # ------------------------------------------------------
+    # ADD BUTTON
+    # ------------------------------------------------------
+
+    if st.button(
+        "➕ Add Appliance",
+        type="primary",
+        use_container_width=True,
+    ):
+
+        validation = validate_appliance(
+            preview
+        )
+
+        if not validation[
+            "valid"
+        ]:
+
+            for error in validation[
+                "errors"
+            ]:
+
+                st.error(
+                    error
+                )
+
+        else:
+
+            st.session_state[
+                "appliance_planner_items"
+            ].append(
+                validation[
+                    "appliance"
+                ]
             )
 
-    return None
+            st.success(
+                f"{appliance_name} added successfully."
+            )
 
+            st.rerun()
 
-# ==========================================================
-# SECTION 12 - APPLIANCE NAMES
-# ==========================================================
+    # ------------------------------------------------------
+    # CURRENT APPLIANCES
+    # ------------------------------------------------------
 
-def get_appliance_names():
-
-    return [
-
-        appliance["name"]
-
-        for appliance
-        in DEFAULT_APPLIANCES
-
+    appliances = st.session_state[
+        "appliance_planner_items"
     ]
+
+    st.markdown(
+        "### 📋 Selected Appliances"
+    )
+
+    if not appliances:
+
+        st.warning(
+            "No appliances have been added yet."
+        )
+
+        st.markdown(
+            "Add appliances above to calculate "
+            "the total daily energy demand."
+        )
+
+        return {
+
+            "appliances": [],
+
+            "total_daily_energy_kwh":
+                0.0,
+
+            "total_load_w":
+                0.0,
+
+            "category_summary":
+                {},
+
+        }
+
+    # ------------------------------------------------------
+    # DISPLAY APPLIANCES
+    # ------------------------------------------------------
+
+    contributions = (
+        calculate_appliance_contributions(
+            appliances
+        )
+    )
+
+    for index, item in enumerate(
+        contributions
+    ):
+
+        col1, col2, col3, col4, col5 = (
+            st.columns(
+                [
+                    2.2,
+                    1.0,
+                    1.0,
+                    1.2,
+                    0.8,
+                ]
+            )
+        )
+
+        with col1:
+
+            st.write(
+                f"**{item['name']}**"
+            )
+
+            st.caption(
+                item.get(
+                    "category",
+                    "Other"
+                )
+            )
+
+        with col2:
+
+            st.write(
+                f"{item['power_w']:.0f} W"
+            )
+
+        with col3:
+
+            st.write(
+                f"x {item['quantity']}"
+            )
+
+        with col4:
+
+            st.write(
+                f"{item['daily_energy_kwh']:.3f} kWh"
+            )
+
+        with col5:
+
+            if st.button(
+                "🗑️",
+                key=f"remove_appliance_{index}",
+            ):
+
+                st.session_state[
+                    "appliance_planner_items"
+                ].pop(index)
+
+                st.rerun()
+
+    # ------------------------------------------------------
+    # TOTALS
+    # ------------------------------------------------------
+
+    analysis = analyze_appliance_load(
+        appliances
+    )
+
+    total_energy = analysis[
+        "total_daily_energy_kwh"
+    ]
+
+    total_load = analysis[
+        "total_load_w"
+    ]
+
+    category_summary = analysis[
+        "category_summary"
+    ]
+
+    st.divider()
+
+    st.markdown(
+        "### 📊 Energy Summary"
+    )
+
+    col1, col2, col3 = st.columns(
+        3
+    )
+
+    with col1:
+
+        st.metric(
+            "Daily Energy Demand",
+            f"{total_energy:.2f} kWh/day",
+        )
+
+    with col2:
+
+        st.metric(
+            "Connected Load",
+            f"{total_load:.0f} W",
+        )
+
+    with col3:
+
+        st.metric(
+            "Connected Load",
+            f"{total_load / 1000:.2f} kW",
+        )
+
+    # ------------------------------------------------------
+    # CATEGORY SUMMARY
+    # ------------------------------------------------------
+
+    st.markdown(
+        "#### Energy by Category"
+    )
+
+    if category_summary:
+
+        for category_name, energy in sorted(
+            category_summary.items()
+        ):
+
+            st.write(
+                f"**{category_name}:** "
+                f"{energy:.2f} kWh/day"
+            )
+
+    # ------------------------------------------------------
+    # HIGHEST ENERGY APPLIANCE
+    # ------------------------------------------------------
+
+    highest = analysis[
+        "highest_energy_appliance"
+    ]
+
+    if highest:
+
+        st.warning(
+            f"Highest energy consumer: "
+            f"**{highest['name']}** "
+            f"({highest['daily_energy_kwh']:.2f} kWh/day)"
+        )
+
+    # ------------------------------------------------------
+    # CLEAR ALL
+    # ------------------------------------------------------
+
+    st.divider()
+
+    if st.button(
+        "🧹 Clear All Appliances",
+        use_container_width=True,
+    ):
+
+        st.session_state[
+            "appliance_planner_items"
+        ] = []
+
+        st.rerun()
+
+    # ------------------------------------------------------
+    # RETURN DATA
+    # ------------------------------------------------------
+
+    return {
+
+        "appliances":
+            deepcopy(
+                appliances
+            ),
+
+        "total_daily_energy_kwh":
+            total_energy,
+
+        "total_load_w":
+            total_load,
+
+        "total_load_kw":
+            round(
+                total_load / 1000,
+                4
+            ),
+
+        "category_summary":
+            category_summary,
+
+        "analysis":
+            analysis,
+
+    }
+
+
+# ==========================================================
+# BACKWARD-COMPATIBILITY ALIAS
+# ==========================================================
+
+def appliance_energy_calculator(
+    st,
+) -> Optional[Dict[str, Any]]:
+
+    return display_appliance_calculator(
+        st
+    )
+
+
+# ==========================================================
+# MODULE EXPORTS
+# ==========================================================
+
+__all__ = [
+
+    "DEFAULT_APPLIANCES",
+
+    "safe_float",
+
+    "safe_int",
+
+    "create_appliance_record",
+
+    "normalize_appliance",
+
+    "get_default_appliance",
+
+    "get_appliance_names",
+
+    "calculate_appliance_energy",
+
+    "calculate_appliance_contributions",
+
+    "calculate_total_energy_demand",
+
+    "calculate_daily_demand",
+
+    "calculate_total_load",
+
+    "calculate_category_summary",
+
+    "analyze_appliance_load",
+
+    "sort_appliances_by_energy",
+
+    "validate_appliance",
+
+    "display_appliance_calculator",
+
+    "appliance_energy_calculator",
+
+]
