@@ -907,6 +907,13 @@ def analyze_appliance_load(
 
     return {
 
+        # --------------------------------------------------
+        # ENERGY TOTALS
+        # --------------------------------------------------
+
+        "total_daily_kwh":
+            total_energy,
+
         "total_daily_energy_kwh":
             total_energy,
 
@@ -915,6 +922,10 @@ def analyze_appliance_load(
 
         "daily_energy_kwh":
             total_energy,
+
+        # --------------------------------------------------
+        # LOAD
+        # --------------------------------------------------
 
         "total_load_w":
             total_load,
@@ -925,19 +936,33 @@ def analyze_appliance_load(
                 4
             ),
 
+        # --------------------------------------------------
+        # CATEGORY BREAKDOWN
+        # --------------------------------------------------
+
         "category_summary":
             category_summary,
+
+        # --------------------------------------------------
+        # INDIVIDUAL APPLIANCES
+        # --------------------------------------------------
 
         "appliance_contributions":
             contributions,
 
+        # --------------------------------------------------
+        # HIGHEST CONSUMER
+        # --------------------------------------------------
+
         "highest_energy_appliance":
             highest_energy,
 
+        # Backward-compatible alias
+        "highest_consuming_appliance":
+            highest_energy,
+
     }
-
-
-# ==========================================================
+    # ==========================================================
 # SORT APPLIANCES BY ENERGY
 # ==========================================================
 
