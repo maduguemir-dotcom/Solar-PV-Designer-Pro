@@ -2,7 +2,7 @@
 # SOLAR PV DESIGNER PRO AFRICA™
 # MAIN STREAMLIT APPLICATION
 #
-# Version: 2.4.3
+# Version: 2.4.2
 #
 # Developed by:
 # Engr. Prof. Ibrahim Sani Madugu
@@ -28,13 +28,6 @@
 # - Product Library
 # - Product Management
 # - Central SQLite Product Database
-#
-# IMPORTANT
-# ----------------------------------------------------------
-# Product Library and Product Management use the same
-# central SQLite database:
-#
-# app/data/solar_pv_library.db
 #
 # ==========================================================
 
@@ -138,10 +131,21 @@ from solar_analytics import (
 
 # ==========================================================
 # APPLIANCE ENERGY PLANNER
+# ==========================================================
 #
 # IMPORTANT:
-# Only import functions that actually exist in the current
-# appliance_energy.py.
+# The current appliance_energy.py uses the v2.4 interface:
+#
+#     display_appliance_calculator(st)
+#
+# It does NOT expose the old functions:
+#
+#     create_appliance
+#     calculate_total_daily_energy
+#     calculate_total_monthly_energy
+#     calculate_total_connected_load
+#
+# Therefore we import only the function that actually exists.
 # ==========================================================
 
 try:
@@ -151,12 +155,12 @@ try:
     )
 
     APPLIANCE_MODULE_AVAILABLE = True
-    APPLIANCE_IMPORT_ERROR = None
+    APPLIANCE_MODULE_IMPORT_ERROR = None
 
 except Exception as error:
 
     APPLIANCE_MODULE_AVAILABLE = False
-    APPLIANCE_IMPORT_ERROR = error
+    APPLIANCE_MODULE_IMPORT_ERROR = error
 
 
 # ==========================================================
@@ -236,7 +240,7 @@ except Exception as error:
 
 
 # ==========================================================
-# SECTION 2 - PAGE CONFIGURATION
+# SECTION 2 - APPLICATION CONFIGURATION
 # ==========================================================
 
 st.set_page_config(
@@ -247,13 +251,35 @@ st.set_page_config(
 
     layout="wide",
 
-    initial_sidebar_state="expanded",
-
 )
 
 
 # ==========================================================
-# SECTION 3 - APPLICATION SESSION STATE
+# SECTION 3 - CENTRAL PRODUCT DATABASE INITIALIZATION
+# ==========================================================
+
+if PRODUCT_DATABASE_AVAILABLE:
+
+    try:
+
+        initialize_database()
+
+    except Exception as error:
+
+        st.warning(
+            "Product database initialization warning: "
+            f"{error}"
+        )
+
+else:
+
+    st.warning(
+        "Central Product Database module could not be loaded."
+    )
+
+
+# ==========================================================
+# SECTION 4 - SESSION STATE
 # ==========================================================
 
 DEFAULT_STATE = {
@@ -282,15 +308,11 @@ DEFAULT_STATE = {
 
     "selected_map_location": None,
 
-    "appliances": [],
+    "design_results": None,
 
     "appliance_loads": [],
 
-    "energy_source": "Appliance Planner",
-
-    "design_results": None,
-
-    "ai_recommendations": None,
+    "use_appliance_demand": False,
 
     "cost_diary": [],
 
@@ -305,34 +327,7 @@ for key, value in DEFAULT_STATE.items():
 
 
 # ==========================================================
-# SECTION 4 - CENTRAL DATABASE INITIALIZATION
-# ==========================================================
-
-if PRODUCT_DATABASE_AVAILABLE:
-
-    try:
-
-        initialize_database()
-
-    except Exception as error:
-
-        st.sidebar.warning(
-            "Product database initialization warning."
-        )
-
-        st.sidebar.caption(
-            str(error)
-        )
-
-else:
-
-    st.sidebar.warning(
-        "Central Product Database unavailable."
-    )
-
-
-# ==========================================================
-# SECTION 5 - SIDEBAR HEADER
+# SECTION 5 - APPLICATION SIDEBAR
 # ==========================================================
 
 st.sidebar.title(
@@ -362,7 +357,65 @@ else:
 
 
 # ==========================================================
-# APPLICATION NAVIGATION
+# MODULE STATUS
+# ==========================================================
+
+with st.sidebar.expander(
+    "🔧 Module Status",
+    expanded=False,
+):
+
+    if APPLIANCE_MODULE_AVAILABLE:
+
+        st.success(
+            "✅ Appliance Energy"
+        )
+
+    else:
+
+        st.error(
+            "❌ Appliance Energy"
+        )
+
+    if COST_DIARY_AVAILABLE:
+
+        st.success(
+            "✅ Cost Diary"
+        )
+
+    else:
+
+        st.error(
+            "❌ Cost Diary"
+        )
+
+    if PRODUCT_LIBRARY_AVAILABLE:
+
+        st.success(
+            "✅ Product Library"
+        )
+
+    else:
+
+        st.error(
+            "❌ Product Library"
+        )
+
+    if PRODUCT_MANAGEMENT_AVAILABLE:
+
+        st.success(
+            "✅ Product Management"
+        )
+
+    else:
+
+        st.error(
+            "❌ Product Management"
+        )
+
+
+# ==========================================================
+# SECTION 6 - APPLICATION NAVIGATION
 # ==========================================================
 
 app_page = st.sidebar.radio(
@@ -377,6 +430,8 @@ app_page = st.sidebar.radio(
 
         "🛠️ Product Management",
 
+        "💰 Cost Diary",
+
     ],
 
     key="main_application_navigation",
@@ -385,7 +440,7 @@ app_page = st.sidebar.radio(
 
 
 # ==========================================================
-# SECTION 6 - PRODUCT LIBRARY PAGE
+# SECTION 7 - PRODUCT LIBRARY PAGE
 # ==========================================================
 
 if app_page == "📦 Product Library":
@@ -395,23 +450,9 @@ if app_page == "📦 Product Library":
     )
 
     st.caption(
-        "Create, store, search, compare and manage "
-        "solar PV products using the central SQLite database."
+        "Create, store, search, edit and manage "
+        "Solar PV components."
     )
-
-    if PRODUCT_DATABASE_AVAILABLE:
-
-        try:
-
-            initialize_database()
-
-        except Exception as error:
-
-            st.error(
-                "Unable to initialize the product database."
-            )
-
-            st.exception(error)
 
     if PRODUCT_LIBRARY_AVAILABLE:
 
@@ -443,7 +484,7 @@ if app_page == "📦 Product Library":
 
 
 # ==========================================================
-# SECTION 7 - PRODUCT MANAGEMENT PAGE
+# SECTION 8 - PRODUCT MANAGEMENT PAGE
 # ==========================================================
 
 if app_page == "🛠️ Product Management":
@@ -453,23 +494,9 @@ if app_page == "🛠️ Product Management":
     )
 
     st.caption(
-        "Inspect, edit and safely delete products "
-        "from the central Solar PV Product Library."
+        "Inspect, search, edit and safely delete "
+        "products from your Solar PV Product Library."
     )
-
-    if PRODUCT_DATABASE_AVAILABLE:
-
-        try:
-
-            initialize_database()
-
-        except Exception as error:
-
-            st.error(
-                "Unable to initialize the product database."
-            )
-
-            st.exception(error)
 
     if PRODUCT_MANAGEMENT_AVAILABLE:
 
@@ -502,7 +529,51 @@ if app_page == "🛠️ Product Management":
 
 
 # ==========================================================
-# SECTION 8 - MAIN SOLAR PV DESIGNER
+# SECTION 9 - COST DIARY PAGE
+# ==========================================================
+
+if app_page == "💰 Cost Diary":
+
+    st.title(
+        "💰 Solar PV Project Cost Diary"
+    )
+
+    st.caption(
+        "Record actual local-market equipment and "
+        "project costs in their respective currencies."
+    )
+
+    if COST_DIARY_AVAILABLE:
+
+        try:
+
+            display_cost_diary(st)
+
+        except Exception as error:
+
+            st.error(
+                "The Cost Diary encountered an error."
+            )
+
+            st.exception(error)
+
+    else:
+
+        st.error(
+            "The Cost Diary module could not be loaded."
+        )
+
+        if COST_DIARY_IMPORT_ERROR:
+
+            st.exception(
+                COST_DIARY_IMPORT_ERROR
+            )
+
+    st.stop()
+
+
+# ==========================================================
+# SECTION 10 - MAIN SOLAR PV DESIGNER
 # ==========================================================
 
 st.title(
@@ -510,8 +581,9 @@ st.title(
 )
 
 st.caption(
-    "Professional Solar PV System Design, Resource "
-    "Assessment, Sizing and Decision Support"
+    "Professional Solar PV System Design, "
+    "Solar Resource Assessment, Sizing and "
+    "Decision Support"
 )
 
 
@@ -519,16 +591,17 @@ st.info(
     """
     Welcome to Solar PV Designer Pro Africa™.
 
-    This platform supports solar-resource assessment,
-    appliance energy analysis, PV sizing, battery sizing,
-    inverter sizing, carbon-reduction assessment,
-    AI-assisted recommendations and professional reporting.
+    Select a location, assess the available solar resource,
+    build your appliance energy demand, size the PV array,
+    estimate battery and inverter requirements, assess
+    carbon reduction, obtain AI-assisted recommendations,
+    review project costs and generate a professional report.
     """
 )
 
 
 # ==========================================================
-# SECTION 9 - LOCATION SELECTION
+# SECTION 11 - LOCATION SELECTION
 # ==========================================================
 
 st.header(
@@ -579,7 +652,6 @@ if location_method == "🌍 Search for a Place":
 
     )
 
-
     if st.button(
 
         "🔎 Search Location",
@@ -610,23 +682,28 @@ if location_method == "🌍 Search for a Place":
                         "location_search_results"
                     ] = results
 
+                    st.success(
+                        f"{len(results)} location(s) found."
+                    )
+
                 else:
 
                     st.warning(
-                        "No locations were found."
+                        "No locations found."
                     )
 
             except Exception as error:
 
                 st.error(
-                    f"Location search failed: {error}"
+                    "Location search failed."
                 )
 
+                st.exception(error)
 
-    search_results = st.session_state.get(
-        "location_search_results",
-        []
-    )
+
+    search_results = st.session_state[
+        "location_search_results"
+    ]
 
 
     if search_results:
@@ -635,14 +712,13 @@ if location_method == "🌍 Search for a Place":
             "### 📍 Search Results"
         )
 
-
-        labels = []
+        result_labels = []
 
         for result in search_results:
 
             try:
 
-                labels.append(
+                result_labels.append(
                     format_search_result(
                         result
                     )
@@ -650,7 +726,7 @@ if location_method == "🌍 Search for a Place":
 
             except Exception:
 
-                labels.append(
+                result_labels.append(
                     str(result)
                 )
 
@@ -660,11 +736,13 @@ if location_method == "🌍 Search for a Place":
             "Select a location",
 
             range(
-                len(search_results)
+                len(
+                    search_results
+                )
             ),
 
-            format_func=lambda index:
-                labels[index],
+            format_func=lambda i:
+                result_labels[i],
 
             key="selected_search_location",
 
@@ -677,7 +755,7 @@ if location_method == "🌍 Search for a Place":
 
             use_container_width=True,
 
-            key="use_selected_search_location",
+            key="use_selected_location",
 
         ):
 
@@ -685,26 +763,13 @@ if location_method == "🌍 Search for a Place":
                 selected_index
             ]
 
+            latitude = selected.get(
+                "latitude"
+            )
 
-            try:
-
-                latitude = float(
-                    selected.get(
-                        "latitude"
-                    )
-                )
-
-                longitude = float(
-                    selected.get(
-                        "longitude"
-                    )
-                )
-
-            except Exception:
-
-                latitude = None
-                longitude = None
-
+            longitude = selected.get(
+                "longitude"
+            )
 
             if (
                 latitude is not None
@@ -713,27 +778,25 @@ if location_method == "🌍 Search for a Place":
 
                 st.session_state[
                     "latitude"
-                ] = latitude
+                ] = float(latitude)
 
                 st.session_state[
                     "longitude"
-                ] = longitude
+                ] = float(longitude)
 
                 st.session_state[
                     "location_description"
-                ] = (
+                ] = selected.get(
+                    "display_name",
                     selected.get(
-                        "display_name"
+                        "name",
+                        "Selected Location"
                     )
-                    or selected.get(
-                        "name"
-                    )
-                    or "Selected Location"
                 )
 
                 st.session_state[
                     "location_source"
-                ] = "Worldwide Location Search"
+                ] = "Worldwide Search"
 
                 st.session_state[
                     "location_ready"
@@ -745,15 +808,22 @@ if location_method == "🌍 Search for a Place":
 
                 st.rerun()
 
+            else:
+
+                st.error(
+                    "Selected location does not contain "
+                    "valid coordinates."
+                )
+
 
 # ==========================================================
 # MAP LOCATION
 # ==========================================================
 
-if location_method == "🗺️ Select on Map":
+elif location_method == "🗺️ Select on Map":
 
     st.subheader(
-        "🗺️ Select Location on Map"
+        "🗺️ Select Location on Interactive Map"
     )
 
     try:
@@ -775,53 +845,71 @@ if location_method == "🗺️ Select on Map":
                     "longitude"
                 )
 
-                if (
-                    latitude is not None
-                    and longitude is not None
-                ):
+            else:
 
-                    st.session_state[
-                        "latitude"
-                    ] = float(latitude)
+                try:
 
-                    st.session_state[
-                        "longitude"
-                    ] = float(longitude)
+                    latitude, longitude = map_result
 
-                    st.session_state[
-                        "location_description"
-                    ] = "Map Selected Location"
+                except Exception:
 
-                    st.session_state[
-                        "location_source"
-                    ] = "Interactive Map"
+                    latitude = None
+                    longitude = None
+
+
+            if (
+                latitude is not None
+                and longitude is not None
+            ):
+
+                st.session_state[
+                    "latitude"
+                ] = float(latitude)
+
+                st.session_state[
+                    "longitude"
+                ] = float(longitude)
+
+                st.session_state[
+                    "location_description"
+                ] = (
+                    f"Map Location "
+                    f"({float(latitude):.5f}, "
+                    f"{float(longitude):.5f})"
+                )
+
+                st.session_state[
+                    "location_source"
+                ] = "Interactive Map"
+
+                st.session_state[
+                    "location_ready"
+                ] = True
 
     except Exception as error:
 
-        st.warning(
-            f"Interactive map could not be loaded: {error}"
+        st.error(
+            "Interactive map could not be displayed."
         )
+
+        st.exception(error)
 
 
 # ==========================================================
 # MANUAL COORDINATES
 # ==========================================================
 
-if location_method == "📐 Enter Coordinates":
+elif location_method == "📐 Enter Coordinates":
 
     st.subheader(
         "📐 Enter Geographic Coordinates"
     )
 
+    col1, col2 = st.columns(2)
 
-    coordinate_col1, coordinate_col2 = (
-        st.columns(2)
-    )
+    with col1:
 
-
-    with coordinate_col1:
-
-        latitude_input = st.number_input(
+        latitude = st.number_input(
 
             "Latitude",
 
@@ -830,22 +918,26 @@ if location_method == "📐 Enter Coordinates":
             max_value=90.0,
 
             value=float(
-                st.session_state.get(
+                st.session_state[
                     "latitude"
-                )
-                or 0.0
+                ]
+                if st.session_state[
+                    "latitude"
+                ] is not None
+                else 0.0
             ),
 
-            step=0.01,
+            step=0.0001,
+
+            format="%.5f",
 
             key="manual_latitude",
 
         )
 
+    with col2:
 
-    with coordinate_col2:
-
-        longitude_input = st.number_input(
+        longitude = st.number_input(
 
             "Longitude",
 
@@ -854,40 +946,29 @@ if location_method == "📐 Enter Coordinates":
             max_value=180.0,
 
             value=float(
-                st.session_state.get(
+                st.session_state[
                     "longitude"
-                )
-                or 0.0
+                ]
+                if st.session_state[
+                    "longitude"
+                ] is not None
+                else 0.0
             ),
 
-            step=0.01,
+            step=0.0001,
+
+            format="%.5f",
 
             key="manual_longitude",
 
         )
 
 
-    location_name = st.text_input(
-
-        "Location Name",
-
-        value=(
-            st.session_state.get(
-                "location_description"
-            )
-            or ""
-        ),
-
-        placeholder="e.g. Kampala, Uganda",
-
-        key="manual_location_name",
-
-    )
-
-
     if st.button(
 
         "📍 Use These Coordinates",
+
+        type="primary",
 
         use_container_width=True,
 
@@ -897,17 +978,17 @@ if location_method == "📐 Enter Coordinates":
 
         st.session_state[
             "latitude"
-        ] = latitude_input
+        ] = latitude
 
         st.session_state[
             "longitude"
-        ] = longitude_input
+        ] = longitude
 
         st.session_state[
             "location_description"
         ] = (
-            location_name.strip()
-            or "Custom Coordinates"
+            f"Coordinates "
+            f"({latitude:.5f}, {longitude:.5f})"
         )
 
         st.session_state[
@@ -919,7 +1000,7 @@ if location_method == "📐 Enter Coordinates":
         ] = True
 
         st.success(
-            "Coordinates accepted."
+            "Coordinates saved."
         )
 
 
@@ -927,1145 +1008,406 @@ if location_method == "📐 Enter Coordinates":
 # SOLAR DATABASE
 # ==========================================================
 
-if location_method == "☀️ Solar Database":
+elif location_method == "☀️ Solar Database":
 
     st.subheader(
-        "☀️ Solar Resource Database"
+        "☀️ Solar Database"
     )
-
 
     try:
 
-        database = load_solar_database()
+        solar_database = (
+            load_solar_database()
+        )
 
-
-        if database is None:
+        if solar_database is None:
 
             st.warning(
-                "Solar database is unavailable."
+                "Solar database returned no data."
             )
 
-        elif isinstance(
-            database,
-            pd.DataFrame
-        ):
+        else:
 
-            if database.empty:
+            if isinstance(
+                solar_database,
+                pd.DataFrame
+            ):
+
+                database_df = solar_database
+
+            else:
+
+                database_df = pd.DataFrame(
+                    solar_database
+                )
+
+
+            if database_df.empty:
 
                 st.warning(
-                    "The solar database contains no records."
+                    "No solar database records found."
                 )
 
             else:
 
                 st.dataframe(
-
-                    database,
-
+                    database_df,
                     use_container_width=True,
-
                     hide_index=True,
-
                 )
 
 
-                st.info(
-                    "Select a location using the database "
-                    "interface provided by the current data module."
-                )
+                location_column = None
 
-        elif isinstance(
-            database,
-            list
-        ):
+                for candidate in [
 
-            if not database:
+                    "Location",
+                    "location",
+                    "City",
+                    "city",
+                    "Name",
+                    "name",
 
-                st.warning(
-                    "The solar database contains no records."
-                )
+                ]:
 
-            else:
+                    if candidate in database_df.columns:
 
-                df_database = pd.DataFrame(
-                    database
-                )
+                        location_column = candidate
 
-                st.dataframe(
+                        break
 
-                    df_database,
 
-                    use_container_width=True,
+                if location_column:
 
-                    hide_index=True,
+                    location_names = (
+                        database_df[
+                            location_column
+                        ]
+                        .dropna()
+                        .astype(str)
+                        .tolist()
+                    )
 
-                )
+                    selected_name = st.selectbox(
+
+                        "Select location",
+
+                        location_names,
+
+                        key="database_location_select",
+
+                    )
+
+
+                    if st.button(
+
+                        "✅ Use Database Location",
+
+                        use_container_width=True,
+
+                        key="use_database_location",
+
+                    ):
+
+                        matching = database_df[
+                            database_df[
+                                location_column
+                            ].astype(str)
+                            == selected_name
+                        ]
+
+                        if not matching.empty:
+
+                            row = matching.iloc[
+                                0
+                            ]
+
+                            latitude = None
+                            longitude = None
+
+
+                            for candidate in [
+
+                                "Latitude",
+                                "latitude",
+                                "Lat",
+                                "lat",
+
+                            ]:
+
+                                if candidate in row.index:
+
+                                    latitude = row[
+                                        candidate
+                                    ]
+
+                                    break
+
+
+                            for candidate in [
+
+                                "Longitude",
+                                "longitude",
+                                "Lon",
+                                "lon",
+
+                            ]:
+
+                                if candidate in row.index:
+
+                                    longitude = row[
+                                        candidate
+                                    ]
+
+                                    break
+
+
+                            if (
+                                latitude is not None
+                                and longitude is not None
+                            ):
+
+                                st.session_state[
+                                    "latitude"
+                                ] = float(latitude)
+
+                                st.session_state[
+                                    "longitude"
+                                ] = float(longitude)
+
+                                st.session_state[
+                                    "location_description"
+                                ] = selected_name
+
+                                st.session_state[
+                                    "location_source"
+                                ] = "Solar Database"
+
+                                st.session_state[
+                                    "location_ready"
+                                ] = True
+
+                                st.success(
+                                    "Database location selected."
+                                )
+
+                            else:
+
+                                st.warning(
+                                    "This database record does not "
+                                    "contain usable coordinates."
+                                )
 
     except Exception as error:
 
         st.error(
-            f"Solar database could not be loaded: {error}"
+            "Solar database could not be loaded."
         )
 
+        st.exception(error)
+
 
 # ==========================================================
-# LOCATION STATUS
+# CURRENT LOCATION STATUS
 # ==========================================================
 
-latitude = st.session_state.get(
-    "latitude"
-)
-
-longitude = st.session_state.get(
-    "longitude"
-)
-
-
-if latitude is not None and longitude is not None:
-
-    st.session_state[
-        "location_ready"
-    ] = True
-
-
-if st.session_state.get(
+if st.session_state[
     "location_ready"
-):
+]:
 
     st.success(
 
         f"""
-        📍 Location:
+        📍 **Selected Location**
 
-        **{st.session_state.get(
-            "location_description"
-        ) or "Selected Location"}**
+        {st.session_state["location_description"]}
 
-        Coordinates:
+        Latitude:
+        `{st.session_state["latitude"]:.5f}`
 
-        **{float(latitude):.5f},
-        {float(longitude):.5f}**
+        Longitude:
+        `{st.session_state["longitude"]:.5f}`
+
+        Source:
+        `{st.session_state["location_source"]}`
         """
-
     )
 
 
 # ==========================================================
-# NASA POWER SOLAR RESOURCE
+# SECTION 12 - SOLAR RESOURCE ASSESSMENT
 # ==========================================================
 
-if st.session_state.get(
+if st.session_state[
     "location_ready"
-):
-
-    st.divider()
+]:
 
     st.header(
         "☀️ Solar Resource Assessment"
     )
 
+    latitude = st.session_state[
+        "latitude"
+    ]
+
+    longitude = st.session_state[
+        "longitude"
+    ]
+
 
     if st.button(
 
-        "🌞 Retrieve Solar Resource Data",
+        "☀️ Assess Solar Resource",
+
+        type="primary",
 
         use_container_width=True,
 
-        key="retrieve_solar_resource",
+        key="assess_solar_resource",
 
     ):
 
         try:
 
-            resource = get_location_solar_resource(
+            solar_result = (
+                get_location_solar_resource(
 
-                latitude=float(
+                    latitude,
+
+                    longitude,
+
                     st.session_state[
-                        "latitude"
-                    ]
-                ),
-
-                longitude=float(
-                    st.session_state[
-                        "longitude"
-                    ]
-                ),
-
-                location_name=(
-                    st.session_state.get(
                         "location_description"
-                    )
-                    or "Selected Location"
-                ),
-
-            )
-
-
-            if resource:
-
-                st.session_state[
-                    "solar_data"
-                ] = resource
-
-
-                try:
-
-                    summary = get_location_summary(
-                        resource
-                    )
-
-                except Exception:
-
-                    summary = None
-
-
-                st.session_state[
-                    "location_summary"
-                ] = summary
-
-
-                if isinstance(
-                    summary,
-                    dict
-                ):
-
-                    st.session_state[
-                        "sun_hours"
-                    ] = summary.get(
-                        "peak_sun_hours"
-                    )
-
-                    st.session_state[
-                        "temperature"
-                    ] = summary.get(
-                        "average_temperature"
-                    )
-
-
-                if (
-                    st.session_state.get(
-                        "sun_hours"
-                    ) is not None
-                ):
-
-                    st.success(
-                        "Solar resource data retrieved successfully."
-                    )
-
-                else:
-
-                    st.warning(
-                        "Solar resource was retrieved, "
-                        "but peak-sun-hour data was not available."
-                    )
-
-            else:
-
-                st.warning(
-                    "No solar resource data was returned."
-                )
-
-        except Exception as error:
-
-            st.error(
-                f"Solar resource retrieval failed: {error}"
-            )
-
-
-# ==========================================================
-# DISPLAY SOLAR RESOURCE SUMMARY
-# ==========================================================
-
-solar_summary = st.session_state.get(
-    "location_summary"
-)
-
-
-if isinstance(
-    solar_summary,
-    dict
-):
-
-    st.subheader(
-        "📊 Solar Resource Summary"
-    )
-
-
-    summary_col1, summary_col2, summary_col3 = (
-        st.columns(3)
-    )
-
-
-    with summary_col1:
-
-        value = solar_summary.get(
-            "peak_sun_hours"
-        )
-
-        st.metric(
-
-            "Peak Sun Hours",
-
-            (
-                f"{float(value):.2f}"
-                if value is not None
-                else "N/A"
-            ),
-
-        )
-
-
-    with summary_col2:
-
-        value = solar_summary.get(
-            "average_temperature"
-        )
-
-        st.metric(
-
-            "Average Temperature",
-
-            (
-                f"{float(value):.1f} °C"
-                if value is not None
-                else "N/A"
-            ),
-
-        )
-
-
-    with summary_col3:
-
-        st.metric(
-
-            "Location",
-
-            st.session_state.get(
-                "location_description"
-            )
-            or "Selected Location",
-
-        )
-
-
-# ==========================================================
-# APPLIANCE ENERGY PLANNER
-# ==========================================================
-
-st.divider()
-
-st.header(
-    "🔌 Appliance Energy Planner"
-)
-
-st.write(
-    """
-    Build the project's electricity demand from the
-    appliances that will be used at the site.
-
-    The planner calculates daily energy demand from
-    appliance quantity, wattage and operating hours.
-    """
-)
-
-
-appliance_records = []
-appliance_daily_energy = 0.0
-
-
-if APPLIANCE_MODULE_AVAILABLE:
-
-    try:
-
-        appliance_result = (
-            display_appliance_calculator(st)
-        )
-
-
-        if isinstance(
-            appliance_result,
-            tuple
-        ):
-
-            appliance_records = (
-                appliance_result[0]
-                or []
-            )
-
-            appliance_daily_energy = float(
-                appliance_result[1]
-                or 0.0
-            )
-
-        else:
-
-            appliance_records = (
-                appliance_result
-                or []
-            )
-
-
-            appliance_daily_energy = 0.0
-
-
-    except Exception as error:
-
-        st.error(
-            "The Appliance Energy Planner encountered "
-            f"an error: {error}"
-        )
-
-else:
-
-    st.error(
-        "The Appliance Energy Planner could not be loaded."
-    )
-
-    if APPLIANCE_IMPORT_ERROR:
-
-        st.exception(
-            APPLIANCE_IMPORT_ERROR
-        )
-
-
-# ==========================================================
-# ENERGY DEMAND SOURCE
-# ==========================================================
-
-st.divider()
-
-st.subheader(
-    "⚡ Energy Demand for PV Design"
-)
-
-
-energy_source = st.radio(
-
-    "Choose the source of daily energy demand",
-
-    [
-
-        "Appliance Planner",
-
-        "Manual Input",
-
-    ],
-
-    horizontal=True,
-
-    key="energy_source_selector",
-
-)
-
-
-if (
-    energy_source == "Appliance Planner"
-):
-
-    if (
-        appliance_records
-        and appliance_daily_energy > 0
-    ):
-
-        energy = float(
-            appliance_daily_energy
-        )
-
-
-        st.success(
-
-            f"""
-            Appliance Planner demand:
-
-            **{energy:.2f} kWh/day**
-
-            This value will be used for PV sizing.
-            """
-
-        )
-
-    else:
-
-        energy = 0.0
-
-
-        st.warning(
-
-            """
-            No appliance demand is currently available.
-
-            Add appliances above or select **Manual Input**.
-            """
-
-        )
-
-else:
-
-    energy = st.number_input(
-
-        "Daily Energy Consumption (kWh/day)",
-
-        min_value=0.1,
-
-        value=5.0,
-
-        step=0.1,
-
-        key="manual_energy_demand",
-
-    )
-
-
-# ==========================================================
-# SYSTEM DESIGN INPUTS
-# ==========================================================
-
-st.divider()
-
-st.header(
-    "⚙️ Solar PV System Design Inputs"
-)
-
-
-design_col1, design_col2, design_col3 = (
-    st.columns(3)
-)
-
-
-with design_col1:
-
-    panel_power = st.number_input(
-
-        "Solar Panel Rating (W)",
-
-        min_value=50.0,
-
-        value=550.0,
-
-        step=10.0,
-
-        key="design_panel_power",
-
-    )
-
-
-    system_efficiency = st.number_input(
-
-        "Overall System Efficiency",
-
-        min_value=0.50,
-
-        max_value=1.00,
-
-        value=0.80,
-
-        step=0.01,
-
-        key="design_system_efficiency",
-
-    )
-
-
-with design_col2:
-
-    battery_voltage = st.selectbox(
-
-        "Battery System Voltage (V)",
-
-        [
-
-            12,
-
-            24,
-
-            48,
-
-        ],
-
-        index=2,
-
-        key="design_battery_voltage",
-
-    )
-
-
-    battery_dod = st.number_input(
-
-        "Battery Depth of Discharge",
-
-        min_value=0.10,
-
-        max_value=1.00,
-
-        value=0.80,
-
-        step=0.05,
-
-        key="design_battery_dod",
-
-    )
-
-
-with design_col3:
-
-    autonomy_days = st.number_input(
-
-        "Days of Autonomy",
-
-        min_value=1,
-
-        max_value=30,
-
-        value=1,
-
-        step=1,
-
-        key="design_autonomy_days",
-
-    )
-
-
-    inverter_safety_factor = st.number_input(
-
-        "Inverter Safety Factor",
-
-        min_value=1.0,
-
-        max_value=2.0,
-
-        value=1.25,
-
-        step=0.05,
-
-        key="design_inverter_safety_factor",
-
-    )
-
-
-# ==========================================================
-# DESIGN BUTTON
-# ==========================================================
-
-design_button = st.button(
-
-    "🚀 Design Solar PV System",
-
-    type="primary",
-
-    use_container_width=True,
-
-    disabled=(
-
-        not st.session_state.get(
-            "location_ready",
-            False
-        )
-
-        or energy <= 0
-
-    ),
-
-)
-
-
-# ==========================================================
-# ENGINEERING DESIGN
-# ==========================================================
-
-if design_button:
-
-    sun_hours = st.session_state.get(
-        "sun_hours"
-    )
-
-
-    temperature = st.session_state.get(
-        "temperature"
-    )
-
-
-    if (
-        sun_hours is None
-        or float(sun_hours) <= 0
-    ):
-
-        st.error(
-            "Please retrieve valid solar-resource data "
-            "before designing the system."
-        )
-
-    else:
-
-        try:
-
-            # ------------------------------------------------
-            # PV ARRAY
-            # ------------------------------------------------
-
-            try:
-
-                pv_size = calculate_pv_size(
-
-                    energy,
-
-                    float(sun_hours),
-
-                    system_efficiency,
+                    ],
 
                 )
-
-            except TypeError:
-
-                pv_size = calculate_pv_size(
-
-                    energy=energy,
-
-                    sun_hours=float(
-                        sun_hours
-                    ),
-
-                    efficiency=system_efficiency,
-
-                    temperature=temperature,
-
-                )
-
-
-            # ------------------------------------------------
-            # NUMBER OF PANELS
-            # ------------------------------------------------
-
-            try:
-
-                number_of_panels = calculate_panels(
-
-                    pv_size,
-
-                    panel_power,
-
-                )
-
-            except TypeError:
-
-                number_of_panels = (
-                    float(pv_size)
-                    * 1000
-                    / float(panel_power)
-                )
-
-                number_of_panels = int(
-                    -(-number_of_panels // 1)
-                )
-
-
-            # ------------------------------------------------
-            # BATTERY
-            # ------------------------------------------------
-
-            battery_result = calculate_battery(
-
-                energy,
-
-                autonomy_days,
-
-                battery_voltage,
-
-                battery_dod,
-
             )
-
-
-            # ------------------------------------------------
-            # CONNECTED LOAD
-            # ------------------------------------------------
-
-            connected_load = 0.0
-
-
-            if appliance_records:
-
-                for appliance in appliance_records:
-
-                    try:
-
-                        quantity = float(
-                            appliance.get(
-                                "Quantity",
-                                0
-                            )
-                        )
-
-                        wattage = float(
-                            appliance.get(
-                                "Wattage (W)",
-                                0
-                            )
-                        )
-
-                        connected_load += (
-                            quantity
-                            * wattage
-                        )
-
-                    except Exception:
-
-                        pass
-
-
-            if connected_load <= 0:
-
-                connected_load = (
-                    energy
-                    * 1000
-                    / max(
-                        float(sun_hours),
-                        1.0
-                    )
-                )
-
-
-            # ------------------------------------------------
-            # INVERTER
-            # ------------------------------------------------
-
-            inverter_result = calculate_inverter(
-
-                connected_load,
-
-                inverter_safety_factor,
-
-            )
-
-
-            # ------------------------------------------------
-            # CARBON
-            # ------------------------------------------------
-
-            carbon_result = calculate_carbon(
-                energy
-            )
-
-
-            # ------------------------------------------------
-            # DESIGN RESULTS
-            # ------------------------------------------------
-
-            design_results = {
-
-                "daily_energy_kwh":
-                    float(energy),
-
-                "sun_hours":
-                    float(sun_hours),
-
-                "temperature":
-                    temperature,
-
-                "pv_size":
-                    float(pv_size),
-
-                "number_of_panels":
-                    int(
-                        number_of_panels
-                    ),
-
-                "panel_power_w":
-                    float(panel_power),
-
-                "battery_voltage":
-                    battery_voltage,
-
-                "battery_dod":
-                    battery_dod,
-
-                "autonomy_days":
-                    autonomy_days,
-
-                "connected_load_w":
-                    connected_load,
-
-                "battery":
-                    battery_result,
-
-                "inverter":
-                    inverter_result,
-
-                "carbon":
-                    carbon_result,
-
-                "location":
-                    (
-                        st.session_state.get(
-                            "location_description"
-                        )
-                        or "Custom Location"
-                    ),
-
-                "latitude":
-                    st.session_state.get(
-                        "latitude"
-                    ),
-
-                "longitude":
-                    st.session_state.get(
-                        "longitude"
-                    ),
-
-                "location_source":
-                    st.session_state.get(
-                        "location_source"
-                    ),
-
-            }
-
 
             st.session_state[
-                "design_results"
-            ] = design_results
+                "solar_data"
+            ] = solar_result
 
-
-            st.success(
-                "✅ Solar PV system design completed successfully."
+            summary = get_location_summary(
+                solar_result
             )
 
+            st.session_state[
+                "solar_summary"
+            ] = summary
+
+            if summary:
+
+                st.session_state[
+                    "sun_hours"
+                ] = summary.get(
+                    "peak_sun_hours",
+                    summary.get(
+                        "sun_hours"
+                    )
+                )
+
+                st.session_state[
+                    "temperature"
+                ] = summary.get(
+                    "average_temperature",
+                    summary.get(
+                        "temperature"
+                    )
+                )
+
+            st.success(
+                "Solar resource assessment completed."
+            )
 
         except Exception as error:
 
             st.error(
-                f"System design failed: {error}"
+                "Solar resource assessment failed."
             )
 
             st.exception(error)
 
 
-# ==========================================================
-# DESIGN RESULTS
-# ==========================================================
-
-design_results = st.session_state.get(
-    "design_results"
-)
+    solar_summary = st.session_state[
+        "solar_summary"
+    ]
 
 
-if design_results:
+    if solar_summary:
 
-    st.divider()
+        c1, c2, c3 = st.columns(3)
 
-    st.header(
-        "📊 Solar PV System Results"
-    )
+        with c1:
 
-
-    result_col1, result_col2, result_col3 = (
-        st.columns(3)
-    )
-
-
-    with result_col1:
-
-        st.metric(
-
-            "Daily Energy",
-
-            (
-                f"{float(
-                    design_results[
-                        'daily_energy_kwh'
-                    ]
-                ):.2f} kWh/day"
-            ),
-
-        )
-
-
-        st.metric(
-
-            "PV Array Size",
-
-            (
-                f"{float(
-                    design_results[
-                        'pv_size'
-                    ]
-                ):.2f} kW"
-            ),
-
-        )
-
-
-    with result_col2:
-
-        st.metric(
-
-            "Number of Panels",
-
-            int(
-                design_results[
-                    "number_of_panels"
-                ]
-            ),
-
-        )
-
-
-        st.metric(
-
-            "Panel Rating",
-
-            (
-                f"{float(
-                    design_results[
-                        'panel_power_w'
-                    ]
-                ):.0f} W"
-            ),
-
-        )
-
-
-    with result_col3:
-
-        st.metric(
-
-            "Peak Sun Hours",
-
-            (
-                f"{float(
-                    design_results[
-                        'sun_hours'
-                    ]
-                ):.2f}"
-            ),
-
-        )
-
-
-        st.metric(
-
-            "Location",
-
-            design_results.get(
-                "location"
+            sun_hours = solar_summary.get(
+                "peak_sun_hours"
             )
-            or "Custom Location",
 
-        )
+            if sun_hours is not None:
 
+                st.metric(
+                    "Peak Sun Hours",
+                    f"{float(sun_hours):.2f} h/day",
+                )
 
-    # ======================================================
-    # BATTERY
-    # ======================================================
+        with c2:
 
-    st.subheader(
-        "🔋 Battery System"
-    )
+            temperature = solar_summary.get(
+                "average_temperature"
+            )
 
-    battery_result = design_results.get(
-        "battery"
-    )
+            if temperature is not None:
 
-    if isinstance(
-        battery_result,
-        dict
-    ):
+                st.metric(
+                    "Average Temperature",
+                    f"{float(temperature):.1f} °C",
+                )
 
-        st.json(
-            battery_result
-        )
+        with c3:
 
-    else:
-
-        st.write(
-            battery_result
-        )
-
-
-    # ======================================================
-    # INVERTER
-    # ======================================================
-
-    st.subheader(
-        "⚡ Inverter System"
-    )
-
-    inverter_result = design_results.get(
-        "inverter"
-    )
-
-    if isinstance(
-        inverter_result,
-        dict
-    ):
-
-        st.json(
-            inverter_result
-        )
-
-    else:
-
-        st.write(
-            inverter_result
-        )
-
-
-    # ======================================================
-    # CARBON
-    # ======================================================
-
-    st.subheader(
-        "🌱 Carbon Reduction"
-    )
-
-    carbon_result = design_results.get(
-        "carbon"
-    )
-
-    if isinstance(
-        carbon_result,
-        dict
-    ):
-
-        st.json(
-            carbon_result
-        )
-
-    else:
-
-        st.write(
-            carbon_result
-        )
+            st.metric(
+                "Location",
+                st.session_state[
+                    "location_description"
+                ],
+            )
 
 
 # ==========================================================
-# SOLAR ANALYTICS
+# SECTION 13 - SOLAR ANALYTICS
 # ==========================================================
 
-solar_data = st.session_state.get(
+if st.session_state[
     "solar_data"
-)
-
-
-if solar_data:
-
-    st.divider()
+]:
 
     st.header(
-        "📈 Solar Resource Analytics"
+        "📊 Solar Analytics"
     )
-
 
     try:
 
         analytics_result = (
             analyze_solar_resource(
-                solar_data
+                st.session_state[
+                    "solar_data"
+                ]
             )
         )
-
 
         if analytics_result:
 
             if isinstance(
+                analytics_result,
+                pd.DataFrame
+            ):
+
+                st.dataframe(
+                    analytics_result,
+                    use_container_width=True,
+                )
+
+            elif isinstance(
                 analytics_result,
                 dict
             ):
@@ -2083,182 +1425,819 @@ if solar_data:
     except Exception as error:
 
         st.warning(
-            "Solar analytics could not be generated: "
-            f"{error}"
+            "Solar analytics could not be displayed."
         )
 
-
-# ==========================================================
-# AI SOLAR ADVISOR
-# ==========================================================
-
-if design_results:
-
-    st.divider()
-
-    st.header(
-        "🤖 AI Solar Advisor"
-    )
-
-
-    if st.button(
-
-        "Generate AI Recommendations",
-
-        use_container_width=True,
-
-        key="generate_ai_recommendations",
-
-    ):
-
-        try:
-
-            recommendations = (
-                generate_ai_recommendations(
-                    design_results
-                )
-            )
-
-
-            st.session_state[
-                "ai_recommendations"
-            ] = recommendations
-
-
-        except Exception as error:
-
-            st.error(
-                f"AI recommendation failed: {error}"
-            )
-
-
-    recommendations = st.session_state.get(
-        "ai_recommendations"
-    )
-
-
-    if recommendations:
-
-        st.write(
-            recommendations
-        )
+        st.exception(error)
 
 
 # ==========================================================
-# PROJECT COST DIARY
+# SECTION 14 - APPLIANCE ENERGY PLANNER
 # ==========================================================
 
-if COST_DIARY_AVAILABLE:
+st.header(
+    "🔌 Appliance Energy Demand"
+)
 
-    st.divider()
+st.caption(
+    "Build the project's daily electricity demand "
+    "from the actual appliances used at the site."
+)
+
+
+if APPLIANCE_MODULE_AVAILABLE:
 
     try:
 
-        display_cost_diary(st)
+        appliance_records, appliance_total = (
+            display_appliance_calculator(st)
+        )
 
     except Exception as error:
 
         st.error(
-            "The Project Cost Diary encountered "
-            f"an error: {error}"
+            "The Appliance Energy Planner encountered "
+            "an error."
         )
+
+        st.exception(error)
+
+        appliance_records = (
+            st.session_state.get(
+                "appliance_loads",
+                []
+            )
+        )
+
+        appliance_total = 0.0
 
 else:
 
-    st.divider()
-
-    st.warning(
-        "Project Cost Diary is currently unavailable."
+    st.error(
+        "The Appliance Energy Planner module "
+        "could not be loaded."
     )
 
+    if APPLIANCE_MODULE_IMPORT_ERROR:
 
-    if COST_DIARY_IMPORT_ERROR:
+        st.exception(
+            APPLIANCE_MODULE_IMPORT_ERROR
+        )
 
-        with st.expander(
-            "View Cost Diary Import Error"
-        ):
+    appliance_records = (
+        st.session_state.get(
+            "appliance_loads",
+            []
+        )
+    )
 
-            st.exception(
-                COST_DIARY_IMPORT_ERROR
-            )
+    appliance_total = 0.0
 
 
 # ==========================================================
-# PDF REPORT
+# DETERMINE ENERGY DEMAND
 # ==========================================================
 
-if design_results:
+manual_energy = st.number_input(
 
-    st.divider()
+    "Manual Daily Energy Demand (kWh/day)",
 
-    st.header(
-        "📄 Professional Design Report"
+    min_value=0.0,
+
+    value=5.0,
+
+    step=0.1,
+
+    key="manual_energy_demand",
+
+)
+
+
+use_appliance_demand = st.session_state.get(
+
+    "use_appliance_demand",
+
+    False,
+
+)
+
+
+if use_appliance_demand and appliance_total > 0:
+
+    energy_demand = appliance_total
+
+    energy_source = (
+        "Appliance Energy Planner"
+    )
+
+    st.success(
+
+        f"""
+        🔌 Appliance demand is being used for
+        PV sizing:
+
+        **{energy_demand:.2f} kWh/day**
+        """
+    )
+
+else:
+
+    energy_demand = manual_energy
+
+    energy_source = "Manual Input"
+
+    st.info(
+
+        f"""
+        Manual energy demand is being used:
+
+        **{energy_demand:.2f} kWh/day**
+        """
     )
 
 
-    if st.button(
+st.session_state[
+    "energy_source"
+] = energy_source
 
-        "📄 Generate PDF Report",
 
-        use_container_width=True,
+# ==========================================================
+# SECTION 15 - SYSTEM DESIGN INPUTS
+# ==========================================================
 
-        key="generate_pdf_report",
+st.header(
+    "⚙️ Solar PV System Design Inputs"
+)
 
-    ):
+
+col1, col2, col3 = st.columns(3)
+
+
+with col1:
+
+    sun_hours_input = st.number_input(
+
+        "Peak Sun Hours",
+
+        min_value=0.1,
+
+        max_value=12.0,
+
+        value=float(
+            st.session_state[
+                "sun_hours"
+            ]
+            if st.session_state[
+                "sun_hours"
+            ] is not None
+            else 4.5
+        ),
+
+        step=0.1,
+
+        key="design_sun_hours",
+
+    )
+
+
+with col2:
+
+    autonomy_days = st.number_input(
+
+        "Battery Autonomy (days)",
+
+        min_value=0.0,
+
+        max_value=10.0,
+
+        value=2.0,
+
+        step=0.5,
+
+        key="design_autonomy_days",
+
+    )
+
+
+with col3:
+
+    system_voltage = st.selectbox(
+
+        "System Voltage",
+
+        [12, 24, 48],
+
+        index=2,
+
+        key="design_system_voltage",
+
+    )
+
+
+# ==========================================================
+# DERATING
+# ==========================================================
+
+col1, col2, col3 = st.columns(3)
+
+
+with col1:
+
+    system_derating = st.number_input(
+
+        "System Derating Factor",
+
+        min_value=0.50,
+
+        max_value=1.00,
+
+        value=0.80,
+
+        step=0.01,
+
+        key="system_derating",
+
+    )
+
+
+with col2:
+
+    battery_efficiency = st.number_input(
+
+        "Battery Efficiency",
+
+        min_value=0.50,
+
+        max_value=1.00,
+
+        value=0.90,
+
+        step=0.01,
+
+        key="battery_efficiency",
+
+    )
+
+
+with col3:
+
+    depth_of_discharge = st.number_input(
+
+        "Depth of Discharge",
+
+        min_value=0.10,
+
+        max_value=1.00,
+
+        value=0.80,
+
+        step=0.01,
+
+        key="depth_of_discharge",
+
+    )
+
+
+# ==========================================================
+# SECTION 16 - PV SYSTEM DESIGN
+# ==========================================================
+
+if st.button(
+
+    "🚀 Calculate Solar PV System",
+
+    type="primary",
+
+    use_container_width=True,
+
+    key="calculate_system",
+
+):
+
+    if energy_demand <= 0:
+
+        st.error(
+            "Daily energy demand must be greater than zero."
+        )
+
+    elif sun_hours_input <= 0:
+
+        st.error(
+            "Peak Sun Hours must be greater than zero."
+        )
+
+    else:
 
         try:
 
-            pdf_data = create_pdf_report(
-                design_results
+            # --------------------------------------------------
+            # PV SIZE
+            # --------------------------------------------------
+
+            pv_size = calculate_pv_size(
+
+                energy_demand,
+
+                sun_hours_input,
+
+                system_derating,
+
             )
 
 
-            if pdf_data:
+            # --------------------------------------------------
+            # PANEL COUNT
+            # --------------------------------------------------
 
-                st.download_button(
+            panel_result = calculate_panels(
 
-                    label=(
-                        "⬇️ Download Solar PV "
-                        "Design Report"
-                    ),
+                pv_size,
 
-                    data=pdf_data,
+                550,
 
-                    file_name=(
-                        "solar_pv_design_report.pdf"
-                    ),
+            )
 
-                    mime="application/pdf",
 
-                    use_container_width=True,
+            # --------------------------------------------------
+            # BATTERY
+            # --------------------------------------------------
 
-                    key="download_pdf_report",
+            battery_result = calculate_battery(
 
-                )
+                energy_demand,
 
-            else:
+                autonomy_days,
 
-                st.warning(
-                    "The PDF generator returned no data."
-                )
+                system_voltage,
+
+                depth_of_discharge,
+
+                battery_efficiency,
+
+            )
+
+
+            # --------------------------------------------------
+            # INVERTER
+            # --------------------------------------------------
+
+            inverter_result = calculate_inverter(
+
+                energy_demand,
+
+                system_voltage,
+
+            )
+
+
+            # --------------------------------------------------
+            # CARBON
+            # --------------------------------------------------
+
+            carbon_result = calculate_carbon(
+
+                energy_demand,
+
+            )
+
+
+            st.session_state[
+                "design_results"
+            ] = {
+
+                "energy_demand":
+                    energy_demand,
+
+                "energy_source":
+                    energy_source,
+
+                "sun_hours":
+                    sun_hours_input,
+
+                "pv_size":
+                    pv_size,
+
+                "panel_result":
+                    panel_result,
+
+                "battery_result":
+                    battery_result,
+
+                "inverter_result":
+                    inverter_result,
+
+                "carbon_result":
+                    carbon_result,
+
+            }
+
+
+            st.success(
+                "Solar PV system calculation completed."
+            )
 
 
         except Exception as error:
 
             st.error(
-                f"PDF report generation failed: {error}"
+                "Solar PV calculation failed."
             )
 
             st.exception(error)
 
 
 # ==========================================================
-# FOOTER
+# SECTION 17 - DISPLAY DESIGN RESULTS
+# ==========================================================
+
+results = st.session_state[
+    "design_results"
+]
+
+
+if results:
+
+    st.header(
+        "📐 Solar PV Design Results"
+    )
+
+
+    c1, c2, c3, c4 = st.columns(4)
+
+
+    with c1:
+
+        st.metric(
+
+            "Daily Energy",
+
+            f"{results['energy_demand']:.2f} kWh/day",
+
+        )
+
+
+    with c2:
+
+        try:
+
+            st.metric(
+
+                "PV Array",
+
+                f"{float(results['pv_size']):.2f} kW",
+
+            )
+
+        except Exception:
+
+            st.metric(
+
+                "PV Array",
+
+                str(
+                    results["pv_size"]
+                ),
+
+            )
+
+
+    with c3:
+
+        st.metric(
+
+            "Energy Source",
+
+            results[
+                "energy_source"
+            ],
+
+        )
+
+
+    with c4:
+
+        st.metric(
+
+            "Peak Sun Hours",
+
+            f"{results['sun_hours']:.2f} h/day",
+
+        )
+
+
+    st.subheader(
+        "☀️ PV Array"
+    )
+
+    st.write(
+        results[
+            "panel_result"
+        ]
+    )
+
+
+    st.subheader(
+        "🔋 Battery Bank"
+    )
+
+    st.write(
+        results[
+            "battery_result"
+        ]
+    )
+
+
+    st.subheader(
+        "⚡ Inverter"
+    )
+
+    st.write(
+        results[
+            "inverter_result"
+        ]
+    )
+
+
+    st.subheader(
+        "🌱 Carbon Reduction"
+    )
+
+    st.write(
+        results[
+            "carbon_result"
+        ]
+    )
+
+
+# ==========================================================
+# SECTION 18 - AI SOLAR ADVISOR
+# ==========================================================
+
+st.header(
+    "🤖 AI Solar Advisor"
+)
+
+
+if st.button(
+
+    "🤖 Generate Solar Recommendation",
+
+    use_container_width=True,
+
+    key="generate_ai_recommendation",
+
+):
+
+    try:
+
+        recommendation = (
+            generate_ai_recommendations(
+                results
+                if results
+                else {
+                    "energy_demand":
+                        energy_demand,
+
+                    "sun_hours":
+                        sun_hours_input,
+
+                    "location":
+                        st.session_state.get(
+                            "location_description"
+                        ),
+                }
+            )
+        )
+
+        st.session_state[
+            "ai_recommendation"
+        ] = recommendation
+
+    except Exception as error:
+
+        st.error(
+            "AI recommendation could not be generated."
+        )
+
+        st.exception(error)
+
+
+if "ai_recommendation" in st.session_state:
+
+    st.markdown(
+        "### 💡 Recommendation"
+    )
+
+    st.write(
+        st.session_state[
+            "ai_recommendation"
+        ]
+    )
+
+
+# ==========================================================
+# SECTION 19 - COST DIARY SUMMARY
+# ==========================================================
+
+if COST_DIARY_AVAILABLE:
+
+    st.header(
+        "💰 Project Cost Diary"
+    )
+
+    with st.expander(
+        "Open Project Cost Diary",
+        expanded=False,
+    ):
+
+        try:
+
+            display_cost_diary(st)
+
+        except Exception as error:
+
+            st.error(
+                "Cost Diary could not be displayed."
+            )
+
+            st.exception(error)
+
+
+# ==========================================================
+# SECTION 20 - PROFESSIONAL REPORT
+# ==========================================================
+
+st.header(
+    "📄 Professional Solar PV Report"
+)
+
+
+if st.button(
+
+    "📄 Generate PDF Report",
+
+    use_container_width=True,
+
+    key="generate_pdf_report",
+
+):
+
+    if not results:
+
+        st.warning(
+            "Please calculate the solar PV system first."
+        )
+
+    else:
+
+        try:
+
+            report_data = {
+
+                "location":
+                    st.session_state.get(
+                        "location_description"
+                    ),
+
+                "latitude":
+                    st.session_state.get(
+                        "latitude"
+                    ),
+
+                "longitude":
+                    st.session_state.get(
+                        "longitude"
+                    ),
+
+                "energy_demand":
+                    results.get(
+                        "energy_demand"
+                    ),
+
+                "energy_source":
+                    results.get(
+                        "energy_source"
+                    ),
+
+                "sun_hours":
+                    results.get(
+                        "sun_hours"
+                    ),
+
+                "pv_size":
+                    results.get(
+                        "pv_size"
+                    ),
+
+                "panel_result":
+                    results.get(
+                        "panel_result"
+                    ),
+
+                "battery_result":
+                    results.get(
+                        "battery_result"
+                    ),
+
+                "inverter_result":
+                    results.get(
+                        "inverter_result"
+                    ),
+
+                "carbon_result":
+                    results.get(
+                        "carbon_result"
+                    ),
+
+                "appliances":
+                    appliance_records,
+
+            }
+
+
+            pdf_result = create_pdf_report(
+                report_data
+            )
+
+
+            if pdf_result:
+
+                if isinstance(
+                    pdf_result,
+                    bytes
+                ):
+
+                    st.download_button(
+
+                        "📥 Download PDF Report",
+
+                        data=pdf_result,
+
+                        file_name=(
+                            "solar_pv_design_report.pdf"
+                        ),
+
+                        mime="application/pdf",
+
+                        use_container_width=True,
+
+                    )
+
+                else:
+
+                    try:
+
+                        with open(
+                            pdf_result,
+                            "rb"
+                        ) as file:
+
+                            st.download_button(
+
+                                "📥 Download PDF Report",
+
+                                data=file.read(),
+
+                                file_name=(
+                                    "solar_pv_design_report.pdf"
+                                ),
+
+                                mime="application/pdf",
+
+                                use_container_width=True,
+
+                            )
+
+                    except Exception:
+
+                        st.write(
+                            pdf_result
+                        )
+
+        except Exception as error:
+
+            st.error(
+                "PDF report generation failed."
+            )
+
+            st.exception(error)
+
+
+# ==========================================================
+# SECTION 21 - APPLICATION FOOTER
 # ==========================================================
 
 st.divider()
 
 st.caption(
-    "Solar PV Designer Pro Africa™ v2.4.3 | "
+    "SOLAR PV DESIGNER PRO AFRICA™ v2.4.2"
+)
+
+st.caption(
     "Developed by Engr. Prof. Ibrahim Sani Madugu"
+)
+
+st.caption(
+    "Professional Solar PV Design, Analysis and "
+    "Decision Support Platform"
 )
