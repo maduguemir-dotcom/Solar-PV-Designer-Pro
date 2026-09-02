@@ -857,46 +857,51 @@ def calculate_category_summary(
 # ==========================================================
 # ANALYZE APPLIANCE LOAD
 # ==========================================================
-
 def analyze_appliance_load(
     appliances: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    """
+    Analyze the complete appliance load.
 
-    contributions = (
-        calculate_appliance_contributions(
-            appliances
-        )
+    Returns multiple backward-compatible key names
+    for total daily energy consumption.
+    """
+
+    if appliances is None:
+        appliances = []
+
+    # Calculate individual appliance contributions
+    contributions = calculate_appliance_contributions(
+        appliances
     )
 
-    total_energy = (
-        calculate_total_energy_demand(
-            appliances
-        )
+    # Total daily energy
+    total_energy = calculate_total_energy_demand(
+        appliances
     )
 
-    total_load = (
-        calculate_total_load(
-            appliances
-        )
+    # Total connected load
+    total_load = calculate_total_load(
+        appliances
     )
 
-    category_summary = (
-        calculate_category_summary(
-            appliances
-        )
+    # Category breakdown
+    category_summary = calculate_category_summary(
+        appliances
     )
 
+    # Find highest energy-consuming appliance
     if contributions:
 
         highest_energy = max(
-
             contributions,
-
-            key=lambda item:
-            safe_float(
+            key=lambda item: safe_float(
                 item.get(
                     "daily_energy_kwh",
-                    0
+                    item.get(
+                        "energy_kwh",
+                        0
+                    )
                 )
             )
         )
@@ -905,7 +910,56 @@ def analyze_appliance_load(
 
         highest_energy = None
 
-    return {
+    # ------------------------------------------------------
+    # RETURN ALL COMPATIBILITY ALIASES
+    # ------------------------------------------------------
+
+    analysis = {
+
+        # Required by current test
+        "total_daily_kwh":
+            total_energy,
+
+        # Newer naming convention
+        "total_daily_energy_kwh":
+            total_energy,
+
+        # Additional compatibility names
+        "total_energy_kwh":
+            total_energy,
+
+        "daily_energy_kwh":
+            total_energy,
+
+        # Connected load
+        "total_load_w":
+            total_load,
+
+        "total_load_kw":
+            round(
+                total_load / 1000.0,
+                4
+            ),
+
+        # Category information
+        "category_summary":
+            category_summary,
+
+        # Appliance-level information
+        "appliance_contributions":
+            contributions,
+
+        # Highest consumer
+        "highest_energy_appliance":
+            highest_energy,
+
+        # Compatibility alias
+        "highest_consuming_appliance":
+            highest_energy,
+    }
+
+    return analysis
+
 
         # --------------------------------------------------
         # ENERGY TOTALS
