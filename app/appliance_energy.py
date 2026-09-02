@@ -959,7 +959,20 @@ def analyze_appliance_load(
     }
 
     return analysis
+def test_analysis_keys():
+    """
+    Internal diagnostic for appliance analysis.
+    """
 
+    result = analyze_appliance_load([])
+
+    return {
+        "has_total_daily_kwh":
+            "total_daily_kwh" in result,
+
+        "keys":
+            list(result.keys()),
+    }
 
         # --------------------------------------------------
         # ENERGY TOTALS
